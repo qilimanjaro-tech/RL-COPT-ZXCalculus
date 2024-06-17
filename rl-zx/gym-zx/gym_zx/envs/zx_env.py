@@ -28,18 +28,18 @@ def handler(signum, frame):
     raise Exception("end of time")
 
 class ZXEnv(gym.Env):
-    def __init__(self, qubits, depth):
+    def __init__(self, qubits, depth, env_id):
         self.device = "cuda"
         self.clifford = False
         self.qubits, self.depth = qubits, depth
         self.shape = 3000
         self.gate_type = "twoqubits"
 
-        self.max_episode_len = 75
+        self.max_episode_len = 50
         self.cumulative_reward_episodes = 0
         self.win_episodes = 0
-        self.max_compression = 20
-
+        self.max_compression = 100
+        self.env_id = env_id
         # Unused variables but required for gym
         self.action_space = Discrete(1)
         self.single_action_space = Discrete(1)
@@ -47,6 +47,8 @@ class ZXEnv(gym.Env):
         self.single_observation_space = Graph(
             node_space=Box(low=-1, high=1, shape=(17,)), edge_space=Discrete(3), seed=42
         )
+        self.global_min_gates = np.inf
+        self.global_min_single_gates = np.inf
 
     def step(self, action):
 
@@ -132,11 +134,12 @@ class ZXEnv(gym.Env):
         graph.normalize()
         
         try:
-            circuit = zx.extract_circuit(graph, up_to_perm=True)
+            circuit = zx.extract_circuit(graph.copy(), up_to_perm=True)
             circuit = circuit.to_basic_gates()
             circ = zx.basic_optimization(circuit).to_basic_gates()
             circuit_data = self.get_data(circ)
             new_gates = circuit_data[self.gate_type]
+        
         except:
             new_gates = np.inf
             act_type = "STOP"
@@ -145,7 +148,10 @@ class ZXEnv(gym.Env):
         reward = 0
         if new_gates < self.min_gates:
             self.min_gates = new_gates
-            self.final_circuit = circ            
+            self.total_single_qubit_gates = circuit_data["gates"]
+            self.final_circuit = circ 
+            self.circuit_up_to_perm = zx.extract_circuit(graph.copy(), up_to_perm=False)
+                       
             
         if new_gates <= self.min_gates:
             self.opt_episode_len = self.episode_len
@@ -180,8 +186,19 @@ class ZXEnv(gym.Env):
                 win_vs_pyzx = -1
             
             done = True
+            if self.min_gates <= self.global_min_gates and self.total_single_qubit_gates <= self.global_min_single_gates:
+                self.best_episode_seen = self.final_circuit
+                self.global_min_gates = self.min_gates
+                self.global_min_single_gates = self.total_single_qubit_gates
+                circuit_qasm = self.best_episode_seen.to_qasm()
+                filename = "/home/jnogue/qilimanjaro/Copt-cquere/rl-zx/cquere/circuits/after/circuit_training_10q/output_circuit"+str(self.env_id)+".qasm"
+                with open(filename, 'w') as file:
+                    file.write(circuit_qasm)
+                filename = "/home/jnogue/qilimanjaro/Copt-cquere/rl-zx/cquere/circuits/after/circuit_training_10q/output_circuit"+str(self.env_id)+"up_to_perm.qasm"
+                with open(filename, 'w') as file:
+                    file.write(self.circuit_up_to_perm.to_qasm())
 
-            print("Win vs Pyzx: ", win_vs_pyzx, " Episode Gates: ", self.min_gates, "Cflow_gates: ", self.pyzx_gates, "Episode Len", self.episode_len, "Opt Episode Len", self.opt_episode_len)
+            print("Win vs Pyzx: ", win_vs_pyzx, " Episode Gates: ", self.min_gates, "Single gates:", self.total_single_qubit_gates, "Episode Len", self.episode_len, "Opt Episode Len", self.opt_episode_len)
             return (
                 self.graph,
                 reward,
@@ -208,7 +225,7 @@ class ZXEnv(gym.Env):
                     "win_vs_pyzx": win_vs_pyzx,
                     "min_gates": self.min_gates,
                     "graph_obs": [self.policy_obs(), self.value_obs()],
-                    "final_circuit": self.final_circuit,
+                    "final_circuit": self.best_episode_seen,
                     "action_stats": [self.best_action_stats["pivb"], 
                                      self.best_action_stats["pivg"],
                                      self.best_action_stats["piv"],
@@ -246,61 +263,35 @@ class ZXEnv(gym.Env):
         self.swap_cost = 0
         self.episode_stats = {"pivb": 0 , "pivg":0, "piv":0, "lc": 0, "id":0, "gf":0}
         self.best_action_stats = {"pivb": 0 , "pivg":0, "piv":0 , "lc": 0, "id":0, "gf":0}
-        valid_circuit = False
+    
+        rand_graph = zx.generate.generate_cquere(qubits=self.qubits,depth=self.depth,p_t=0.08, p_cz=0.08, p_cnot=0.33, p_s_prob=0.2)
+        c = zx.Circuit.from_graph(rand_graph).to_basic_gates()
+        self.no_opt_stats = self.get_data(c)
+        self.initial_depth = c.depth()
         
-        # circuit generation
-        while not valid_circuit:
-            
-            g = zx.generate.cliffordT(
-               self.qubits, self.depth, p_t=0.17, p_s=0.24, p_hsh=0.25, 
-            )
-            c = zx.Circuit.from_graph(g)
-            self.no_opt_stats = self.get_data(c.to_basic_gates())
-            self.initial_depth = c.to_basic_gates().depth()
-            self.rand_circuit = zx.optimize.basic_optimization(c.split_phase_gates())
-            self.initial_stats = self.get_data(self.rand_circuit)
-            self.graph = self.rand_circuit.to_graph()
-            
-            signal.signal(signal.SIGALRM, handler)
-            signal.alarm(10)
-            try:
-                zx.simplify.teleport_reduce(self.graph)
-            except: 
-                print('Teleport reduce error')
-                continue
-            
-            signal.alarm(0)
-            
-            basic_circ = zx.optimize.basic_optimization(zx.Circuit.from_graph(self.graph.copy()).split_phase_gates())
-            self.basic_opt_data = self.get_data(basic_circ.to_basic_gates())
-            self.to_graph_like()
-            self.graph = self.graph.copy()  # This relabels the nodes such that there are no empty spaces
+        self.initial_stats = self.get_data(c)
+        graph = c.to_graph()
+        
+        basic_circ = zx.optimize.basic_optimization(zx.Circuit.from_graph(graph.copy()).split_phase_gates())
+        circuit_data = self.get_data(basic_circ.to_basic_gates())
+        self.graph = basic_circ.to_graph()
+        self.to_graph_like()
+        self.graph = self.graph.copy()  # This relabels the nodes such that there are no empty spaces
+        self.pyzx_data = self.obtain_gates_pyzx(graph.copy())
+        self.pyzx_gates = self.pyzx_data[self.gate_type]
+        
+        self.pivot_info_dict = self.match_pivot_parallel() | self.match_pivot_boundary() | self.match_pivot_gadget()
+        self.gadget_info_dict, self.gadgets = self.match_phase_gadgets()
+        self.gadget_fusion_ids = list(self.gadget_info_dict)
             
             
-            self.pivot_info_dict = self.match_pivot_parallel() | self.match_pivot_boundary() | self.match_pivot_gadget()
-            self.gadget_info_dict, self.gadgets = self.match_phase_gadgets()
-            self.gadget_fusion_ids = list(self.gadget_info_dict)
-            actions_available = len(self.match_lcomp()) + len(self.pivot_info_dict.keys()) + len(self.match_ids())
-            if actions_available == 0:
-                print("Generating new circuit")
-            else:
-                valid_circuit = True
-            
-            full_reduce_start = time.time()
-            self.pyzx_data = self.obtain_gates_pyzx(g.copy())
-            full_reduce_end = time.time()
+        self.basic_opt_data = circuit_data
+        self.current_gates = circuit_data[self.gate_type]
+        self.initial_stats = circuit_data
+        self.final_circuit = basic_circ
+        self.min_gates = circuit_data[self.gate_type]
 
-            self.pyzx_gates = self.pyzx_data[self.gate_type]
-            circuit= zx.extract_circuit(self.graph.copy(), up_to_perm=True)
-            circuit = circuit.to_basic_gates()
-            circuit = zx.basic_optimization(circuit).to_basic_gates()
-            circuit_data = self.get_data(circuit)
-            self.current_gates = circuit_data[self.gate_type]
-            self.initial_stats = circuit_data
-            self.final_circuit = circuit
-            self.min_gates = circuit_data[self.gate_type]
-
-        return self.graph, {"graph_obs": [self.policy_obs(), self.value_obs()], "full_reduce_time": full_reduce_end-full_reduce_start}
+        return self.graph, {"graph_obs": [self.policy_obs(), self.value_obs()]}
 
     def to_graph_like(self):
         """Transforms a ZX-diagram into graph-like"""
@@ -326,6 +317,7 @@ class ZXEnv(gym.Env):
         # create networkx graph
         graph_nx.add_nodes_from(v_list)
         graph_nx.add_edges_from(e_list)
+
 
         # make the graph directed to duplicate edges
         graph_nx = graph_nx.to_directed()
@@ -540,7 +532,7 @@ class ZXEnv(gym.Env):
             edge_features.append(edge_feature)
         
         edge_index_value = torch.tensor(edge_list).t().contiguous()
-        x_value = torch.tensor(node_features).view(-1, 11)
+        x_value = torch.tensor(node_features).view(-1, 12)
         x_value = x_value.type(torch.float32)
         edge_features = torch.tensor(edge_features).view(-1, 3)
         return (x_value.to(self.device), edge_index_value.to(self.device), edge_features.to(self.device))

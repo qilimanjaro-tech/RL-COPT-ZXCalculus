@@ -41,8 +41,8 @@ class AgentGNN(nn.Module):
         self.bin_required = int(np.ceil(np.log2(self.obs_shape)))
         self.qubits = envs.envs[0].qubits
 
-        c_in_p = 16
-        c_in_v = 11
+        c_in_p = 17 #dimension policy obs
+        c_in_v = 12 #dimension value obs
         edge_dim = 6
         edge_dim_v = 3
         self.global_attention_critic = geom_nn.GlobalAttention(

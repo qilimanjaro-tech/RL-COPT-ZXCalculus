@@ -90,7 +90,7 @@ def parse_args():
 def make_env(gym_id, seed, idx, capture_video, run_name, qubits, depth):
     
     def thunk():
-        env = gym.make(gym_id, qubits=qubits, depth=depth)
+        env = gym.make(gym_id, qubits=qubits, depth=depth, env_id= idx)
         env = gym.wrappers.RecordEpisodeStatistics(env)
         if capture_video and idx == 0:
             env = gym.wrappers.RecordVideo(env, f"videos/{run_name}")
@@ -110,7 +110,7 @@ if __name__ == "__main__":
     
     #Training size
     qubits = 5
-    depth = 55
+    depth = 25
     
     random.seed(args.seed)
     np.random.seed(args.seed)
@@ -118,6 +118,7 @@ if __name__ == "__main__":
     torch.backends.cudnn.deterministic = args.torch_deterministic
 
     device = torch.device("cuda" if torch.cuda.is_available() and args.cuda else "cpu")
+    
     envs = gym.vector.SyncVectorEnv(
         [make_env(args.gym_id, args.seed + i, i, args.capture_video, run_name, qubits, depth) for i in range(args.num_envs)]
     )
@@ -289,7 +290,6 @@ if __name__ == "__main__":
 
                 _, newlogprob, entropy, newvalue, logits, _ = agent.get_action_and_value(
                     (policies_batch, values_batch),
-                    None,
                     b_actions.long()[mb_inds].T, device=device
                 )  # training begins, here we pass minibatch action so the agent doesnt sample a new action
                 logratio = newlogprob - b_logprobs[mb_inds]  # logratio = log(newprob/oldprob)
