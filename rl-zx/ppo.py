@@ -12,6 +12,7 @@ import pyzx as zx
 import torch
 import torch.nn as nn
 import torch.optim as optim
+import torch.multiprocessing as mp
 
 from distutils.util import strtobool
 from torch.utils.tensorboard import SummaryWriter
@@ -100,6 +101,7 @@ def make_env(gym_id, seed, idx, capture_video, run_name, qubits, depth):
 
 
 if __name__ == "__main__":
+    mp.set_start_method('spawn') ##set multiprocessing spawn for CUDA multiprocessing
     args = parse_args()
     run_name = f"{args.gym_id}__{args.exp_name}__{args.seed}__{int(time.time())}"
     writer = SummaryWriter(f"runs/{run_name}")
@@ -110,7 +112,7 @@ if __name__ == "__main__":
     
     #Training size
     qubits = 5
-    depth = 25
+    depth = 100
     
     random.seed(args.seed)
     np.random.seed(args.seed)
@@ -120,8 +122,7 @@ if __name__ == "__main__":
     device = torch.device("cuda" if torch.cuda.is_available() and args.cuda else "cpu")
     
     envs = gym.vector.SyncVectorEnv(
-        [make_env(args.gym_id, args.seed + i, i, args.capture_video, run_name, qubits, depth) for i in range(args.num_envs)]
-    )
+        [make_env(args.gym_id, args.seed + i, i, args.capture_video, run_name, qubits, depth) for i in range(args.num_envs)])
     agent = AgentGNN(envs, device).to(device)
 
     optimizer = optim.Adam(agent.parameters(), lr=args.learning_rate, eps=1e-5)
@@ -440,4 +441,4 @@ if __name__ == "__main__":
     envs.close()
     writer.close()
 
-torch.save(agent.state_dict(), "state_dict_model5x70_twoqubits_new.pt")
+#torch.save(agent.state_dict(), "state_dict_5x160_cquere_twoqubits.pt")
