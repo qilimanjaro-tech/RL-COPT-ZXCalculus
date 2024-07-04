@@ -112,7 +112,7 @@ if __name__ == "__main__":
     
     #Training size
     qubits = 5
-    depth = 100
+    depth = 70
     
     random.seed(args.seed)
     np.random.seed(args.seed)
@@ -124,6 +124,10 @@ if __name__ == "__main__":
     envs = gym.vector.SyncVectorEnv(
         [make_env(args.gym_id, args.seed + i, i, args.capture_video, run_name, qubits, depth) for i in range(args.num_envs)])
     agent = AgentGNN(envs, device).to(device)
+    agent.load_state_dict(
+        torch.load("/home/jordi.riu/Copt-cquere/rl-zx/state_dict_5x70_twoqubits_high_entropy_len50.pt", map_location=torch.device(device))
+    )  
+    agent.eval()
 
     optimizer = optim.Adam(agent.parameters(), lr=args.learning_rate, eps=1e-5)
 
@@ -166,10 +170,10 @@ if __name__ == "__main__":
     wins_vs_pyzx = []
     for update in range(1, num_updates + 1):
         # Annealing the rate if instructed to do so.
-        """
+        
         if update % 50 == 1:
             torch.save(agent.state_dict(), "state_dict_" + str(global_step) + "model5x70_twoqubits_new.pt")
-        """
+        
         if args.anneal_lr:
             frac = max(1.0 / 100, 1.0 - (update - 1.0) / (num_updates * 5.0 / 6))
             lrnow = frac * args.learning_rate

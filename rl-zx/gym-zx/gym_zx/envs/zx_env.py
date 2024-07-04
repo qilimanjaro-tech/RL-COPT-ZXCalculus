@@ -175,7 +175,7 @@ class ZXEnv(gym.Env):
             remaining_actions == 0 or act_type == "STOP" or self.episode_len == self.max_episode_len
         ):  
             
-            reward += (min(self.pyzx_gates, self.basic_opt_data[self.gate_type], self.initial_stats[self.gate_type])-new_gates)/self.max_compression
+            reward += (self.pyzx_gates -new_gates)/self.max_compression
             
             if self.min_gates < min(self.pyzx_gates, self.basic_opt_data[self.gate_type], self.initial_stats[self.gate_type]):
                 win_vs_pyzx = 1
@@ -265,10 +265,26 @@ class ZXEnv(gym.Env):
         self.swap_cost = 0
         self.episode_stats = {"pivb": 0 , "pivg":0, "piv":0, "lc": 0, "id":0, "gf":0}
         self.best_action_stats = {"pivb": 0 , "pivg":0, "piv":0 , "lc": 0, "id":0, "gf":0}
-    
+
         c = zx.generate.cquere_circuit(qubits=self.qubits,depth=self.depth, p_rz = 0.32, p_ry=0.36, p_rzz=0.29, 
                                        p_rx = 0.03, p_trz = 0.21, p_try = 0.065, p_trx = 0.5).to_basic_gates()
         rand_graph = c.to_graph()
+        
+        '''
+        import os
+        path = os.path.join('cquere','circuits', 'before', 'SrH_files')
+        geo = "1.9961"
+        path = os.path.join('cquere', 'circuits', 'before')
+        #c = zx.Circuit.from_qasm_file(os.path.join(path,"SrH_10q_"+geo+".qasm")).to_basic_gates()
+        c = zx.Circuit.from_qasm_file(os.path.join(path,"10q-SrH-ckt.qasm")).to_basic_gates()
+        g = c.to_graph()         
+        c = zx.optimize.basic_optimization(zx.Circuit.from_graph(g.copy()).split_phase_gates())
+    
+        g = zx.generate.cliffordT(
+               self.qubits, self.depth, p_t=0.17, p_s=0.24, p_hsh=0.25, 
+            )
+        c = zx.Circuit.from_graph(g)
+        '''
         self.no_opt_stats = self.get_data(c)
         self.initial_depth = c.depth()
         
