@@ -32,13 +32,13 @@ class ZXEnv(gym.Env):
         self.device = "cuda"
         self.clifford = False
         self.qubits, self.depth = qubits, depth
-        self.shape = 3000
+        self.shape = 500
         self.gate_type = "twoqubits"
 
         self.max_episode_len = 50
         self.cumulative_reward_episodes = 0
         self.win_episodes = 0
-        self.max_compression = 100
+        self.max_compression = 35
         self.env_id = env_id
         # Unused variables but required for gym
         self.action_space = Discrete(1)
@@ -382,7 +382,7 @@ class ZXEnv(gym.Env):
                 else:
                     node_feature[oh_phase_idx] = 1.0
 
-                if self.graph.neighbors(real_node) == 1:  # Phase Gadget
+                if len(self.graph.neighbors(real_node))== 1:  # Phase Gadget
                     node_feature[10] = 1.0
 
             # Extraction cost
@@ -396,7 +396,7 @@ class ZXEnv(gym.Env):
         current_node = n_nodes
         edge_list = list(p_graph.edges)
         edge_features = []
-        edge_feature_number = 6
+        edge_feature_number = 7
         for edge in edge_list:
             # True: 1, False: 0. Features: Graph edge, NOT INCLUDED brings to frontier, NOT INCLUDED is brought by,
             # Removing Node-LC,Removing Node-PV, Removing Node-ID, Gadget fusion, Between Action
@@ -404,7 +404,10 @@ class ZXEnv(gym.Env):
             edge_feature = [0.0 for _ in range(edge_feature_number)]
 
             # Graph edge
-            edge_feature[0] = 1.0
+            if self.graph.edge_type(edge) == EdgeType.HADAMARD:
+                edge_feature[0] = 1.0
+            elif self.graph.edge_type(edge) == EdgeType.SIMPLE:
+                edge_feature[6] = 1.0
             edge_features.append(edge_feature)
 
         # Add action nodes from lcomp and pivoting lists and connect them
@@ -535,7 +538,7 @@ class ZXEnv(gym.Env):
                     node_feature[10] = 1.0 #10th element is general non-Clifford phase
                 else:
                     node_feature[oh_phase_idx] = 1.0
-                if self.graph.neighbors(real_node) == 1:  # Phase Gadget
+                if len(self.graph.neighbors(real_node)) == 1:  # Phase Gadget
                     node_feature[11] = 1.0
 
             node_features.append(node_feature)
@@ -546,15 +549,19 @@ class ZXEnv(gym.Env):
             edge_list.append((node2, node1))
 
         edge_features = []
-        for node1, node2 in edge_list:
+        for edge in edge_list:
             # Edge in graph, pull node, pushed node.
-            edge_feature = [1.0, 0.0, 0.0]
+            edge_feature=[0.0, 0.0]
+            if self.graph.edge_type(edge) == EdgeType.HADAMARD:
+                edge_feature[0] = 1.0
+            elif self.graph.edge_type(edge) == EdgeType.SIMPLE:
+                edge_feature[1] = 1.0
             edge_features.append(edge_feature)
         
         edge_index_value = torch.tensor(edge_list).t().contiguous()
         x_value = torch.tensor(node_features).view(-1, 12)
         x_value = x_value.type(torch.float32)
-        edge_features = torch.tensor(edge_features).view(-1, 3)
+        edge_features = torch.tensor(edge_features).view(-1, 2)
         return (x_value.to(self.device), edge_index_value.to(self.device), edge_features.to(self.device))
     
     MatchLcompType = Tuple[VT,Tuple[VT,...]]
