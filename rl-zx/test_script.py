@@ -1,10 +1,11 @@
+import multiprocessing
 import argparse
 import os
 import random
 import time
 
 
-import gymnasium as gym
+import gym
 import gym_zx
 import networkx as nx
 import numpy as np
@@ -12,7 +13,6 @@ import pyzx as zx
 import torch
 import torch.nn as nn
 import torch.optim as optim
-import torch.multiprocessing as mp
 
 from distutils.util import strtobool
 from torch.utils.tensorboard import SummaryWriter
@@ -20,7 +20,6 @@ from torch_geometric.data import Batch, Data
 
 from rl_agent import AgentGNN
 
-count = 0
 os.environ["CUDA_LAUNCH_BLOCKING"] = "1"
 os.environ["TORCH_USE_CUDA_DSA"] = "1"
 
@@ -99,9 +98,7 @@ def make_env(gym_id, seed, idx, capture_video, run_name, qubits, depth):
 
     return thunk
 
-
-if __name__ == "__main__":
-    mp.set_start_method('spawn') ##set multiprocessing spawn for CUDA multiprocessing
+def worker(_):
     args = parse_args()
     run_name = f"{args.gym_id}__{args.exp_name}__{args.seed}__{int(time.time())}"
     writer = SummaryWriter(f"runs/{run_name}")
@@ -112,7 +109,7 @@ if __name__ == "__main__":
     
     #Training size
     qubits = 5
-    depth = 100
+    depth = 25
     
     random.seed(args.seed)
     np.random.seed(args.seed)
@@ -122,7 +119,8 @@ if __name__ == "__main__":
     device = torch.device("cuda" if torch.cuda.is_available() and args.cuda else "cpu")
     
     envs = gym.vector.SyncVectorEnv(
-        [make_env(args.gym_id, args.seed + i, i, args.capture_video, run_name, qubits, depth) for i in range(args.num_envs)])
+        [make_env(args.gym_id, args.seed + i, i, args.capture_video, run_name, qubits, depth) for i in range(args.num_envs)]
+    )
     agent = AgentGNN(envs, device).to(device)
 
     optimizer = optim.Adam(agent.parameters(), lr=args.learning_rate, eps=1e-5)
@@ -136,7 +134,6 @@ if __name__ == "__main__":
     
     global_step = 0
     start_time = time.time()
-    
     obs0, reset_info = envs.reset()
     new_value_data = []
     new_policy_data = []
@@ -165,7 +162,6 @@ if __name__ == "__main__":
     swap_gates = []
     pyzx_swap_gates = []
     wins_vs_pyzx = []
-
     for update in range(1, num_updates + 1):
         # Annealing the rate if instructed to do so.
         """
@@ -268,7 +264,7 @@ if __name__ == "__main__":
                     returns[t] = rewards[t] + args.gamma * nextnonterminal * next_return
                 advantages = returns - values
 
-        #flatten the batch
+        
         b_logprobs = logprobs.reshape(-1)
         b_actions = actions.reshape((-1,) + envs.single_action_space.shape)
         b_advantages = advantages.reshape(-1)
@@ -443,4 +439,8 @@ if __name__ == "__main__":
     envs.close()
     writer.close()
 
-#torch.save(agent.state_dict(), "state_dict_5x160_cquere_twoqubits.pt")
+
+if __name__ == '__main__':
+    multiprocessing.set_start_method("spawn")
+    with multiprocessing.Pool(8) as pool:
+        results = pool.map(worker, range(8))

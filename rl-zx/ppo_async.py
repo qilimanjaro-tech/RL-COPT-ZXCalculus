@@ -4,7 +4,7 @@ import random
 import time
 
 
-import gymnasium as gym
+import gym
 import gym_zx
 import networkx as nx
 import numpy as np
@@ -17,7 +17,6 @@ import torch.multiprocessing as mp
 from distutils.util import strtobool
 from torch.utils.tensorboard import SummaryWriter
 from torch_geometric.data import Batch, Data
-
 from rl_agent import AgentGNN
 
 count = 0
@@ -52,7 +51,7 @@ def parse_args():
         help="weather to capture videos of the agent performances (check out `videos` folder)")
 
     # Algorithm specific arguments
-    parser.add_argument("--num-envs", type=int, default=1,
+    parser.add_argument("--num-envs", type=int, default=4,
         help="the number of parallel game environments") #default 8
     parser.add_argument("--num-steps", type=int, default=2048,
         help="the number of steps to run in each environment per policy rollout")
@@ -121,8 +120,9 @@ if __name__ == "__main__":
 
     device = torch.device("cuda" if torch.cuda.is_available() and args.cuda else "cpu")
     
-    envs = gym.vector.SyncVectorEnv(
-        [make_env(args.gym_id, args.seed + i, i, args.capture_video, run_name, qubits, depth) for i in range(args.num_envs)])
+    envs = gym.vector.AsyncVectorEnv(
+       [make_env(args.gym_id, args.seed + i, i, args.capture_video, run_name, qubits, depth) for i in range(args.num_envs)], shared_memory=False)
+    
     agent = AgentGNN(envs, device).to(device)
 
     optimizer = optim.Adam(agent.parameters(), lr=args.learning_rate, eps=1e-5)
@@ -136,7 +136,6 @@ if __name__ == "__main__":
     
     global_step = 0
     start_time = time.time()
-    
     obs0, reset_info = envs.reset()
     new_value_data = []
     new_policy_data = []
