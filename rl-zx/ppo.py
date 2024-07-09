@@ -4,7 +4,12 @@ import random
 import time
 
 
+<<<<<<< HEAD
 import gymnasium as gym
+=======
+from argon2 import Type
+
+>>>>>>> 1c0999493fe380a1fbde0f1f13c37e1d16fa3379
 import gym_zx
 import networkx as nx
 import numpy as np
@@ -52,7 +57,7 @@ def parse_args():
         help="weather to capture videos of the agent performances (check out `videos` folder)")
 
     # Algorithm specific arguments
-    parser.add_argument("--num-envs", type=int, default=1,
+    parser.add_argument("--num-envs", type=int, default=24,
         help="the number of parallel game environments") #default 8
     parser.add_argument("--num-steps", type=int, default=2048,
         help="the number of steps to run in each environment per policy rollout")
@@ -112,7 +117,7 @@ if __name__ == "__main__":
     
     #Training size
     qubits = 5
-    depth = 100
+    depth = 70
     
     random.seed(args.seed)
     np.random.seed(args.seed)
@@ -124,6 +129,10 @@ if __name__ == "__main__":
     envs = gym.vector.SyncVectorEnv(
         [make_env(args.gym_id, args.seed + i, i, args.capture_video, run_name, qubits, depth) for i in range(args.num_envs)])
     agent = AgentGNN(envs, device).to(device)
+    '''agent.load_state_dict(
+        torch.load("/home/jordi.riu/Copt-cquere/rl-zx/state_dict_5x70_twoqubits_high_entropy_len50.pt", map_location=torch.device(device))
+    )  
+    agent.eval()'''
 
     optimizer = optim.Adam(agent.parameters(), lr=args.learning_rate, eps=1e-5)
 
@@ -188,7 +197,6 @@ if __name__ == "__main__":
             value_data.extend(new_value_data)
             policy_data.extend(new_policy_data)
             dones[step] = next_done
-
             with torch.no_grad():
                 action, logprob, _, value, logits, action_ids = agent.get_action_and_value(next_obs_graph, device=device)
                 values[step] = value.flatten()
@@ -196,6 +204,7 @@ if __name__ == "__main__":
             logprobs[step] = logprob
 
             next_obs, reward, done, deprecated, info = envs.step(action_ids.cpu().numpy())
+            
             rewards[step] = torch.tensor(reward).to(device).view(-1)
 
             next_done = torch.Tensor(done).to(device)
