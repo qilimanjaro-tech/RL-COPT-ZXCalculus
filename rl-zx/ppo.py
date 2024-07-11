@@ -4,12 +4,7 @@ import random
 import time
 
 
-<<<<<<< HEAD
 import gymnasium as gym
-=======
-from argon2 import Type
-
->>>>>>> 1c0999493fe380a1fbde0f1f13c37e1d16fa3379
 import gym_zx
 import networkx as nx
 import numpy as np

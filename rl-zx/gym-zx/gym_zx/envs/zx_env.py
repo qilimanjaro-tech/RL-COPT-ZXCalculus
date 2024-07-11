@@ -29,7 +29,7 @@ def handler(signum, frame):
 
 class ZXEnv(gym.Env):
     def __init__(self, qubits, depth, env_id):
-        self.device = "cuda"
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.clifford = False
         self.qubits, self.depth = qubits, depth
         self.shape = 500
@@ -254,8 +254,9 @@ class ZXEnv(gym.Env):
         )
 
 
-    def reset(self):
-        # parameters
+    def reset(self, seed=None, options=None):
+        super().reset(seed=seed)
+                # parameters
         self.episode_len = 0
         self.episode_reward = 0
         self.action_pattern = []

@@ -4,7 +4,7 @@ import random
 import time
 
 
-import gym
+import gymnasium as gym
 import gym_zx
 import networkx as nx
 import numpy as np
@@ -111,7 +111,7 @@ if __name__ == "__main__":
     
     #Training size
     qubits = 5
-    depth = 100
+    depth = 70
     
     random.seed(args.seed)
     np.random.seed(args.seed)
@@ -119,6 +119,7 @@ if __name__ == "__main__":
     torch.backends.cudnn.deterministic = args.torch_deterministic
 
     device = torch.device("cuda" if torch.cuda.is_available() and args.cuda else "cpu")
+    #device = torch.device("cpu")
     
     envs = gym.vector.AsyncVectorEnv(
        [make_env(args.gym_id, args.seed + i, i, args.capture_video, run_name, qubits, depth) for i in range(args.num_envs)], shared_memory=False)
