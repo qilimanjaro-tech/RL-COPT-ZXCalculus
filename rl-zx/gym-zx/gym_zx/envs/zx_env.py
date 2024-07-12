@@ -149,7 +149,7 @@ class ZXEnv(gym.Env):
         reward = 0
         if new_gates <= self.min_gates:
             self.min_gates = new_gates
-            self.total_single_qubit_gates = circuit_data["gates"]
+            self.total_gates = circuit_data["gates"]
             self.final_circuit = circ 
             self.opt_episode_len = self.episode_len
             self.best_action_stats = copy.deepcopy(self.episode_stats)
@@ -186,10 +186,10 @@ class ZXEnv(gym.Env):
             
             done = True
             
-            if self.min_gates <= self.global_min_gates and self.total_single_qubit_gates <= self.global_min_single_gates:
+            if self.min_gates <= self.global_min_gates and self.total_gates <= self.global_min_single_gates:
                 self.best_episode_seen = self.final_circuit
                 self.global_min_gates = self.min_gates
-                self.global_min_single_gates = self.total_single_qubit_gates
+                self.global_min_single_gates = self.total_gates
                 """
                 circuit_qasm = self.best_episode_seen.to_qasm()
                 filename = "/home/jnogue/qilimanjaro/Copt-cquere/rl-zx/cquere/circuits/after/circuit_training_10q/output_circuit"+str(self.env_id)+".qasm"
@@ -200,7 +200,7 @@ class ZXEnv(gym.Env):
                     file.write(self.circuit_up_to_perm.to_qasm())
                 """
             
-            print("Win vs Pyzx: ", win_vs_pyzx, " Episode Gates: ", self.min_gates, "Single gates:", self.total_single_qubit_gates, "Episode Len", self.episode_len, "Opt Episode Len", self.opt_episode_len)
+            print("Win vs Pyzx: ", win_vs_pyzx, " Episode Gates: ", self.min_gates, "Total gates:", self.total_gates, "Episode Len", self.episode_len, "Opt Episode Len", self.opt_episode_len)
             return (
                 self.graph,
                 reward,
@@ -310,7 +310,7 @@ class ZXEnv(gym.Env):
         self.initial_stats = circuit_data
         self.final_circuit = basic_circ
         self.min_gates = circuit_data[self.gate_type]
-        self.total_single_qubit_gates = circuit_data["gates"]
+        self.total_gates = circuit_data["gates"]
 
         return self.graph, {"graph_obs": [self.policy_obs(), self.value_obs()]}
 
