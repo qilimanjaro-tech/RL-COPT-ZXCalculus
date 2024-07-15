@@ -52,7 +52,7 @@ def parse_args():
         help="weather to capture videos of the agent performances (check out `videos` folder)")
 
     # Algorithm specific arguments
-    parser.add_argument("--num-envs", type=int, default=24,
+    parser.add_argument("--num-envs", type=int, default=1,
         help="the number of parallel game environments") #default 8
     parser.add_argument("--num-steps", type=int, default=2048,
         help="the number of steps to run in each environment per policy rollout")
@@ -192,6 +192,7 @@ if __name__ == "__main__":
             value_data.extend(new_value_data)
             policy_data.extend(new_policy_data)
             dones[step] = next_done
+
             with torch.no_grad():
                 action, logprob, _, value, logits, action_ids = agent.get_action_and_value(next_obs_graph, device=device)
                 values[step] = value.flatten()

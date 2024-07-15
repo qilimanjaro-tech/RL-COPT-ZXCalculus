@@ -149,7 +149,7 @@ class ZXEnv(gym.Env):
         reward = 0
         if new_gates <= self.min_gates:
             self.min_gates = new_gates
-            self.total_single_qubit_gates = circuit_data["gates"]
+            self.total_gates = circuit_data["gates"]
             self.final_circuit = circ 
             self.opt_episode_len = self.episode_len
             self.best_action_stats = copy.deepcopy(self.episode_stats)
@@ -175,7 +175,7 @@ class ZXEnv(gym.Env):
             remaining_actions == 0 or act_type == "STOP" or self.episode_len == self.max_episode_len
         ):  
             
-            reward += (self.pyzx_gates -new_gates)/self.max_compression
+            reward += (min(self.pyzx_gates, self.basic_opt_data[self.gate_type], self.initial_stats[self.gate_type])-new_gates)/self.max_compression
             
             if self.min_gates < min(self.pyzx_gates, self.basic_opt_data[self.gate_type], self.initial_stats[self.gate_type]):
                 win_vs_pyzx = 1
@@ -185,22 +185,8 @@ class ZXEnv(gym.Env):
                 win_vs_pyzx = -1
             
             done = True
-            
-            if self.min_gates <= self.global_min_gates and self.total_single_qubit_gates <= self.global_min_single_gates:
-                self.best_episode_seen = self.final_circuit
-                self.global_min_gates = self.min_gates
-                self.global_min_single_gates = self.total_single_qubit_gates
-                """
-                circuit_qasm = self.best_episode_seen.to_qasm()
-                filename = "/home/jnogue/qilimanjaro/Copt-cquere/rl-zx/cquere/circuits/after/circuit_training_10q/output_circuit"+str(self.env_id)+".qasm"
-                with open(filename, 'w') as file:
-                    file.write(circuit_qasm)
-                filename = "/home/jnogue/qilimanjaro/Copt-cquere/rl-zx/cquere/circuits/after/circuit_training_10q/output_circuit"+str(self.env_id)+"up_to_perm.qasm"
-                with open(filename, 'w') as file:
-                    file.write(self.circuit_up_to_perm.to_qasm())
-                """
-            
-            print("Win vs Pyzx: ", win_vs_pyzx, " Episode Gates: ", self.min_gates, "Single gates:", self.total_single_qubit_gates, "Episode Len", self.episode_len, "Opt Episode Len", self.opt_episode_len)
+
+            print("Win vs Pyzx: ", win_vs_pyzx, " Episode Gates: ", self.min_gates, "Cflow_gates: ", self.pyzx_gates, "Episode Len", self.episode_len, "Opt Episode Len", self.opt_episode_len)
             return (
                 self.graph,
                 reward,
@@ -227,7 +213,7 @@ class ZXEnv(gym.Env):
                     "win_vs_pyzx": win_vs_pyzx,
                     "min_gates": self.min_gates,
                     "graph_obs": [self.policy_obs(), self.value_obs()],
-                    "final_circuit": self.best_episode_seen,
+                    "final_circuit": self.final_circuit,
                     "action_stats": [self.best_action_stats["pivb"], 
                                      self.best_action_stats["pivg"],
                                      self.best_action_stats["piv"],
@@ -267,8 +253,9 @@ class ZXEnv(gym.Env):
         self.episode_stats = {"pivb": 0 , "pivg":0, "piv":0, "lc": 0, "id":0, "gf":0}
         self.best_action_stats = {"pivb": 0 , "pivg":0, "piv":0 , "lc": 0, "id":0, "gf":0}
 
-        c = zx.generate.cquere_circuit(qubits=self.qubits,depth=self.depth, p_rz = 0.32, p_ry=0.36, p_rzz=0.29, 
-                                       p_rx = 0.03, p_trz = 0.21, p_try = 0.065, p_trx = 0.5).to_basic_gates()
+        
+        c = zx.generate.cquere_circuit(qubits=self.qubits,depth=self.depth, p_rz = 0.22, p_ry=0.28, p_rzz=0.42, 
+                                       p_rx = 0.02, p_trz = 0.06, p_try = 0, p_trx = 0).to_basic_gates()
         rand_graph = c.to_graph()
         
         '''
@@ -310,7 +297,7 @@ class ZXEnv(gym.Env):
         self.initial_stats = circuit_data
         self.final_circuit = basic_circ
         self.min_gates = circuit_data[self.gate_type]
-        self.total_single_qubit_gates = circuit_data["gates"]
+        self.total_gates = circuit_data["gates"]
 
         return self.graph, {"graph_obs": [self.policy_obs(), self.value_obs()]}
 
@@ -1146,7 +1133,7 @@ class ZXEnv(gym.Env):
             elif isinstance(g, (zx.gates.HAD)):
                 hadamards += 1
                 clifford += 1
-            elif isinstance(g, (zx.gates.CZ, zx.gates.CNOT)):
+            elif isinstance(g, (zx.gates.CZ,zx.gates.XCX,zx.gates.CNOT)):
                 twoqubits += 1
                 if isinstance(g, zx.gates.CNOT):
                     cnots += 1
