@@ -6,12 +6,12 @@ import time
 from fractions import Fraction
 from typing import Callable, Dict, List, Optional, Set, Tuple, Union
 
-import gymnasium as gym
+import gym
 import networkx as nx
 import numpy as np
 import pyzx as zx
 import torch
-from gymnasium.spaces import Box, Discrete, Graph, MultiDiscrete
+from gym.spaces import Box, Discrete, Graph, MultiDiscrete
 from pyzx.circuit import CNOT, HAD, SWAP, Circuit
 from pyzx.extract import bi_adj, connectivity_from_biadj, greedy_reduction, id_simp, max_overlap, permutation_as_swaps
 
@@ -29,16 +29,16 @@ def handler(signum, frame):
 
 class ZXEnv(gym.Env):
     def __init__(self, qubits, depth, env_id):
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.device = "cuda"
         self.clifford = False
         self.qubits, self.depth = qubits, depth
-        self.shape = 500
+        self.shape = 3000
         self.gate_type = "twoqubits"
 
-        self.max_episode_len = 50
+        self.max_episode_len = 500
         self.cumulative_reward_episodes = 0
         self.win_episodes = 0
-        self.max_compression = 35
+        self.max_compression = 100
         self.env_id = env_id
         # Unused variables but required for gym
         self.action_space = Discrete(1)
@@ -149,7 +149,7 @@ class ZXEnv(gym.Env):
         reward = 0
         if new_gates <= self.min_gates:
             self.min_gates = new_gates
-            self.total_gates = circuit_data["gates"]
+            self.total_single_qubit_gates = circuit_data["gates"]
             self.final_circuit = circ 
             self.opt_episode_len = self.episode_len
             self.best_action_stats = copy.deepcopy(self.episode_stats)
@@ -186,10 +186,10 @@ class ZXEnv(gym.Env):
             
             done = True
             
-            if self.min_gates <= self.global_min_gates and self.total_gates <= self.global_min_single_gates:
+            if self.min_gates <= self.global_min_gates and self.total_single_qubit_gates <= self.global_min_single_gates:
                 self.best_episode_seen = self.final_circuit
                 self.global_min_gates = self.min_gates
-                self.global_min_single_gates = self.total_gates
+                self.global_min_single_gates = self.total_single_qubit_gates
                 """
                 circuit_qasm = self.best_episode_seen.to_qasm()
                 filename = "/home/jnogue/qilimanjaro/Copt-cquere/rl-zx/cquere/circuits/after/circuit_training_10q/output_circuit"+str(self.env_id)+".qasm"
@@ -200,7 +200,7 @@ class ZXEnv(gym.Env):
                     file.write(self.circuit_up_to_perm.to_qasm())
                 """
             
-            print("Win vs Pyzx: ", win_vs_pyzx, " Episode Gates: ", self.min_gates, "Total gates:", self.total_gates, "Episode Len", self.episode_len, "Opt Episode Len", self.opt_episode_len)
+            print("Win vs Pyzx: ", win_vs_pyzx, " Episode Gates: ", self.min_gates, "Single gates:", self.total_single_qubit_gates, "Episode Len", self.episode_len, "Opt Episode Len", self.opt_episode_len)
             return (
                 self.graph,
                 reward,
@@ -254,9 +254,8 @@ class ZXEnv(gym.Env):
         )
 
 
-    def reset(self, seed=None, options=None):
-        super().reset(seed=seed)
-                # parameters
+    def reset(self):
+        # parameters
         self.episode_len = 0
         self.episode_reward = 0
         self.action_pattern = []
@@ -266,26 +265,20 @@ class ZXEnv(gym.Env):
         self.swap_cost = 0
         self.episode_stats = {"pivb": 0 , "pivg":0, "piv":0, "lc": 0, "id":0, "gf":0}
         self.best_action_stats = {"pivb": 0 , "pivg":0, "piv":0 , "lc": 0, "id":0, "gf":0}
-
+        '''
         c = zx.generate.cquere_circuit(qubits=self.qubits,depth=self.depth, p_rz = 0.32, p_ry=0.36, p_rzz=0.29, 
                                        p_rx = 0.03, p_trz = 0.21, p_try = 0.065, p_trx = 0.5).to_basic_gates()
         rand_graph = c.to_graph()
+        '''
         
-        '''
         import os
-        path = os.path.join('cquere','circuits', 'before', 'SrH_files')
+        path = os.path.join('cquere','circuits', 'before')
         geo = "1.9961"
-        path = os.path.join('cquere', 'circuits', 'before')
+        
         #c = zx.Circuit.from_qasm_file(os.path.join(path,"SrH_10q_"+geo+".qasm")).to_basic_gates()
-        c = zx.Circuit.from_qasm_file(os.path.join(path,"10q-SrH-ckt.qasm")).to_basic_gates()
-        g = c.to_graph()         
-        c = zx.optimize.basic_optimization(zx.Circuit.from_graph(g.copy()).split_phase_gates())
-    
-        g = zx.generate.cliffordT(
-               self.qubits, self.depth, p_t=0.17, p_s=0.24, p_hsh=0.25, 
-            )
-        c = zx.Circuit.from_graph(g)
-        '''
+        c = zx.Circuit.from_qasm_file(os.path.join(path,"SrH_2.1461_12q.qasm")).to_basic_gates()   
+        c = zx.optimize.basic_optimization(zx.Circuit.from_graph(c.to_graph().copy()).split_phase_gates())
+
         self.no_opt_stats = self.get_data(c)
         self.initial_depth = c.depth()
         
@@ -297,7 +290,7 @@ class ZXEnv(gym.Env):
         self.graph = basic_circ.to_graph()
         self.to_graph_like()
         self.graph = self.graph.copy()  # This relabels the nodes such that there are no empty spaces
-        self.pyzx_data = self.obtain_gates_pyzx(graph.copy())
+        self.pyzx_data, self.circuit = self.obtain_gates_pyzx(graph.copy())
         self.pyzx_gates = self.pyzx_data[self.gate_type]
         
         self.pivot_info_dict = self.match_pivot_parallel() | self.match_pivot_boundary() | self.match_pivot_gadget()
@@ -310,7 +303,7 @@ class ZXEnv(gym.Env):
         self.initial_stats = circuit_data
         self.final_circuit = basic_circ
         self.min_gates = circuit_data[self.gate_type]
-        self.total_gates = circuit_data["gates"]
+        self.total_single_qubit_gates = circuit_data["gates"]
 
         return self.graph, {"graph_obs": [self.policy_obs(), self.value_obs()]}
 
@@ -383,7 +376,7 @@ class ZXEnv(gym.Env):
                 else:
                     node_feature[oh_phase_idx] = 1.0
 
-                if len(self.graph.neighbors(real_node))== 1:  # Phase Gadget
+                if self.graph.neighbors(real_node) == 1:  # Phase Gadget
                     node_feature[10] = 1.0
 
             # Extraction cost
@@ -397,7 +390,7 @@ class ZXEnv(gym.Env):
         current_node = n_nodes
         edge_list = list(p_graph.edges)
         edge_features = []
-        edge_feature_number = 7
+        edge_feature_number = 6
         for edge in edge_list:
             # True: 1, False: 0. Features: Graph edge, NOT INCLUDED brings to frontier, NOT INCLUDED is brought by,
             # Removing Node-LC,Removing Node-PV, Removing Node-ID, Gadget fusion, Between Action
@@ -405,10 +398,7 @@ class ZXEnv(gym.Env):
             edge_feature = [0.0 for _ in range(edge_feature_number)]
 
             # Graph edge
-            if self.graph.edge_type(edge) == EdgeType.HADAMARD:
-                edge_feature[0] = 1.0
-            elif self.graph.edge_type(edge) == EdgeType.SIMPLE:
-                edge_feature[6] = 1.0
+            edge_feature[0] = 1.0
             edge_features.append(edge_feature)
 
         # Add action nodes from lcomp and pivoting lists and connect them
@@ -539,7 +529,7 @@ class ZXEnv(gym.Env):
                     node_feature[10] = 1.0 #10th element is general non-Clifford phase
                 else:
                     node_feature[oh_phase_idx] = 1.0
-                if len(self.graph.neighbors(real_node)) == 1:  # Phase Gadget
+                if self.graph.neighbors(real_node) == 1:  # Phase Gadget
                     node_feature[11] = 1.0
 
             node_features.append(node_feature)
@@ -550,19 +540,15 @@ class ZXEnv(gym.Env):
             edge_list.append((node2, node1))
 
         edge_features = []
-        for edge in edge_list:
+        for node1, node2 in edge_list:
             # Edge in graph, pull node, pushed node.
-            edge_feature=[0.0, 0.0]
-            if self.graph.edge_type(edge) == EdgeType.HADAMARD:
-                edge_feature[0] = 1.0
-            elif self.graph.edge_type(edge) == EdgeType.SIMPLE:
-                edge_feature[1] = 1.0
+            edge_feature = [1.0, 0.0, 0.0]
             edge_features.append(edge_feature)
         
         edge_index_value = torch.tensor(edge_list).t().contiguous()
         x_value = torch.tensor(node_features).view(-1, 12)
         x_value = x_value.type(torch.float32)
-        edge_features = torch.tensor(edge_features).view(-1, 2)
+        edge_features = torch.tensor(edge_features).view(-1, 3)
         return (x_value.to(self.device), edge_index_value.to(self.device), edge_features.to(self.device))
     
     MatchLcompType = Tuple[VT,Tuple[VT,...]]
@@ -1133,7 +1119,6 @@ class ZXEnv(gym.Env):
         twoqubits = 0
         cnots = 0
         cz = 0
-        cx = 0
         tcount = 0
         total = 0
         for g in circuit.gates:
@@ -1146,7 +1131,7 @@ class ZXEnv(gym.Env):
             elif isinstance(g, (zx.gates.HAD)):
                 hadamards += 1
                 clifford += 1
-            elif isinstance(g, (zx.gates.CZ, zx.gates.CNOT)):
+            elif isinstance(g, (zx.gates.CZ, zx.gates.XCX, zx.gates.CNOT)):
                 twoqubits += 1
                 if isinstance(g, zx.gates.CNOT):
                     cnots += 1
@@ -1173,4 +1158,4 @@ class ZXEnv(gym.Env):
 
         circuit = zx.basic_optimization(circuit).to_basic_gates()
         self.pyzx_swap_cost = 0
-        return self.get_data(circuit)
+        return self.get_data(circuit), circuit

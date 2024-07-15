@@ -4,7 +4,7 @@ import random
 import time
 
 
-import gymnasium as gym
+import gym
 import gym_zx
 import networkx as nx
 import numpy as np
@@ -52,7 +52,7 @@ def parse_args():
         help="weather to capture videos of the agent performances (check out `videos` folder)")
 
     # Algorithm specific arguments
-    parser.add_argument("--num-envs", type=int, default=24,
+    parser.add_argument("--num-envs", type=int, default=1,
         help="the number of parallel game environments") #default 8
     parser.add_argument("--num-steps", type=int, default=2048,
         help="the number of steps to run in each environment per policy rollout")
@@ -124,10 +124,10 @@ if __name__ == "__main__":
     envs = gym.vector.SyncVectorEnv(
         [make_env(args.gym_id, args.seed + i, i, args.capture_video, run_name, qubits, depth) for i in range(args.num_envs)])
     agent = AgentGNN(envs, device).to(device)
-    '''agent.load_state_dict(
+    agent.load_state_dict(
         torch.load("/home/jordi.riu/Copt-cquere/rl-zx/state_dict_5x70_twoqubits_high_entropy_len50.pt", map_location=torch.device(device))
     )  
-    agent.eval()'''
+    agent.eval()
 
     optimizer = optim.Adam(agent.parameters(), lr=args.learning_rate, eps=1e-5)
 
@@ -140,7 +140,6 @@ if __name__ == "__main__":
     
     global_step = 0
     start_time = time.time()
-    
     obs0, reset_info = envs.reset()
     new_value_data = []
     new_policy_data = []
@@ -169,13 +168,12 @@ if __name__ == "__main__":
     swap_gates = []
     pyzx_swap_gates = []
     wins_vs_pyzx = []
-
     for update in range(1, num_updates + 1):
         # Annealing the rate if instructed to do so.
-        """
+        
         if update % 50 == 1:
             torch.save(agent.state_dict(), "state_dict_" + str(global_step) + "model5x70_twoqubits_new.pt")
-        """
+        
         if args.anneal_lr:
             frac = max(1.0 / 100, 1.0 - (update - 1.0) / (num_updates * 5.0 / 6))
             lrnow = frac * args.learning_rate
@@ -192,6 +190,7 @@ if __name__ == "__main__":
             value_data.extend(new_value_data)
             policy_data.extend(new_policy_data)
             dones[step] = next_done
+
             with torch.no_grad():
                 action, logprob, _, value, logits, action_ids = agent.get_action_and_value(next_obs_graph, device=device)
                 values[step] = value.flatten()
@@ -199,7 +198,6 @@ if __name__ == "__main__":
             logprobs[step] = logprob
 
             next_obs, reward, done, deprecated, info = envs.step(action_ids.cpu().numpy())
-            
             rewards[step] = torch.tensor(reward).to(device).view(-1)
 
             next_done = torch.Tensor(done).to(device)
@@ -272,7 +270,7 @@ if __name__ == "__main__":
                     returns[t] = rewards[t] + args.gamma * nextnonterminal * next_return
                 advantages = returns - values
 
-        #flatten the batch
+        
         b_logprobs = logprobs.reshape(-1)
         b_actions = actions.reshape((-1,) + envs.single_action_space.shape)
         b_advantages = advantages.reshape(-1)
