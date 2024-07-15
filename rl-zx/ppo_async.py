@@ -440,7 +440,8 @@ if __name__ == "__main__":
         swap_gates = []
         pyzx_swap_gates = []
         wins_vs_pyzx = []
+    torch.save(agent.state_dict(), "state_dict_5x160_cquere_twoqubits.pt")
     envs.close()
     writer.close()
 
-#torch.save(agent.state_dict(), "state_dict_5x160_cquere_twoqubits.pt")
+#
