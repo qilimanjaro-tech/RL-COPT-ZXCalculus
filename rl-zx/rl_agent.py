@@ -37,14 +37,12 @@ class AgentGNN(nn.Module):
         super().__init__()
 
         self.device = device
-        #obs_shape = envs.get_attr("shape")#3000
-        #self.obs_shape = obs_shape[0]
-        #qubits_list = envs.get_attr('qubits')#retrieve environemnt qubits
-        #self.qubits = qubits_list[0]
-        self.obs_shape = 3000
+        self.obs_shape = envs.envs[0].shape
         self.bin_required = int(np.ceil(np.log2(self.obs_shape)))
-        c_in_p = 17 #dimension policy obs
-        c_in_v = 12 #dimension value obs
+        self.qubits = envs.envs[0].qubits
+
+        c_in_p = 16
+        c_in_v = 11
         edge_dim = 6
         edge_dim_v = 3
         self.global_attention_critic = geom_nn.GlobalAttention(

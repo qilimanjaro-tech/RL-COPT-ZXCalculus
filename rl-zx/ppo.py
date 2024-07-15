@@ -12,7 +12,6 @@ import pyzx as zx
 import torch
 import torch.nn as nn
 import torch.optim as optim
-import torch.multiprocessing as mp
 
 from distutils.util import strtobool
 from torch.utils.tensorboard import SummaryWriter
@@ -91,7 +90,7 @@ def parse_args():
 def make_env(gym_id, seed, idx, capture_video, run_name, qubits, depth):
     
     def thunk():
-        env = gym.make(gym_id, qubits=qubits, depth=depth, env_id= idx)
+        env = gym.make(gym_id, qubits=qubits, depth=depth)
         env = gym.wrappers.RecordEpisodeStatistics(env)
         if capture_video and idx == 0:
             env = gym.wrappers.RecordVideo(env, f"videos/{run_name}")
@@ -101,7 +100,6 @@ def make_env(gym_id, seed, idx, capture_video, run_name, qubits, depth):
 
 
 if __name__ == "__main__":
-    mp.set_start_method('spawn') ##set multiprocessing spawn for CUDA multiprocessing
     args = parse_args()
     run_name = f"{args.gym_id}__{args.exp_name}__{args.seed}__{int(time.time())}"
     writer = SummaryWriter(f"runs/{run_name}")
@@ -112,7 +110,7 @@ if __name__ == "__main__":
     
     #Training size
     qubits = 5
-    depth = 70
+    depth = 55
     
     random.seed(args.seed)
     np.random.seed(args.seed)
@@ -120,14 +118,10 @@ if __name__ == "__main__":
     torch.backends.cudnn.deterministic = args.torch_deterministic
 
     device = torch.device("cuda" if torch.cuda.is_available() and args.cuda else "cpu")
-    
     envs = gym.vector.SyncVectorEnv(
-        [make_env(args.gym_id, args.seed + i, i, args.capture_video, run_name, qubits, depth) for i in range(args.num_envs)])
+        [make_env(args.gym_id, args.seed + i, i, args.capture_video, run_name, qubits, depth) for i in range(args.num_envs)]
+    )
     agent = AgentGNN(envs, device).to(device)
-    agent.load_state_dict(
-        torch.load("/home/jordi.riu/Copt-cquere/rl-zx/state_dict_5x70_twoqubits_high_entropy_len50.pt", map_location=torch.device(device))
-    )  
-    agent.eval()
 
     optimizer = optim.Adam(agent.parameters(), lr=args.learning_rate, eps=1e-5)
 
@@ -170,10 +164,10 @@ if __name__ == "__main__":
     wins_vs_pyzx = []
     for update in range(1, num_updates + 1):
         # Annealing the rate if instructed to do so.
-        
+        """
         if update % 50 == 1:
             torch.save(agent.state_dict(), "state_dict_" + str(global_step) + "model5x70_twoqubits_new.pt")
-        
+        """
         if args.anneal_lr:
             frac = max(1.0 / 100, 1.0 - (update - 1.0) / (num_updates * 5.0 / 6))
             lrnow = frac * args.learning_rate
@@ -295,6 +289,7 @@ if __name__ == "__main__":
 
                 _, newlogprob, entropy, newvalue, logits, _ = agent.get_action_and_value(
                     (policies_batch, values_batch),
+                    None,
                     b_actions.long()[mb_inds].T, device=device
                 )  # training begins, here we pass minibatch action so the agent doesnt sample a new action
                 logratio = newlogprob - b_logprobs[mb_inds]  # logratio = log(newprob/oldprob)
@@ -445,4 +440,4 @@ if __name__ == "__main__":
     envs.close()
     writer.close()
 
-#torch.save(agent.state_dict(), "state_dict_5x160_cquere_twoqubits.pt")
+torch.save(agent.state_dict(), "state_dict_model5x70_twoqubits_new.pt")
