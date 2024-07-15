@@ -1146,7 +1146,7 @@ class ZXEnv(gym.Env):
             elif isinstance(g, (zx.gates.HAD)):
                 hadamards += 1
                 clifford += 1
-            elif isinstance(g, (zx.gates.CZ, zx.gates.CNOT)):
+            elif isinstance(g, (zx.gates.CZ,zx.gates.XCX,zx.gates.CNOT)):
                 twoqubits += 1
                 if isinstance(g, zx.gates.CNOT):
                     cnots += 1
