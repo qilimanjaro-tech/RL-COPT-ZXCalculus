@@ -175,7 +175,7 @@ class ZXEnv(gym.Env):
             remaining_actions == 0 or act_type == "STOP" or self.episode_len == self.max_episode_len
         ):  
             
-            reward += (self.pyzx_gates -new_gates)/self.max_compression
+            reward += (min(self.pyzx_gates, self.basic_opt_data[self.gate_type], self.initial_stats[self.gate_type])-new_gates)/self.max_compression
             
             if self.min_gates < min(self.pyzx_gates, self.basic_opt_data[self.gate_type], self.initial_stats[self.gate_type]):
                 win_vs_pyzx = 1
@@ -185,22 +185,8 @@ class ZXEnv(gym.Env):
                 win_vs_pyzx = -1
             
             done = True
-            
-            if self.min_gates <= self.global_min_gates and self.total_gates <= self.global_min_single_gates:
-                self.best_episode_seen = self.final_circuit
-                self.global_min_gates = self.min_gates
-                self.global_min_single_gates = self.total_gates
-                """
-                circuit_qasm = self.best_episode_seen.to_qasm()
-                filename = "/home/jnogue/qilimanjaro/Copt-cquere/rl-zx/cquere/circuits/after/circuit_training_10q/output_circuit"+str(self.env_id)+".qasm"
-                with open(filename, 'w') as file:
-                    file.write(circuit_qasm)
-                filename = "/home/jnogue/qilimanjaro/Copt-cquere/rl-zx/cquere/circuits/after/circuit_training_10q/output_circuit"+str(self.env_id)+"up_to_perm.qasm"
-                with open(filename, 'w') as file:
-                    file.write(self.circuit_up_to_perm.to_qasm())
-                """
-            
-            print("Win vs Pyzx: ", win_vs_pyzx, " Episode Gates: ", self.min_gates, "Total gates:", self.total_gates, "Episode Len", self.episode_len, "Opt Episode Len", self.opt_episode_len)
+
+            print("Win vs Pyzx: ", win_vs_pyzx, " Episode Gates: ", self.min_gates, "Cflow_gates: ", self.pyzx_gates, "Episode Len", self.episode_len, "Opt Episode Len", self.opt_episode_len)
             return (
                 self.graph,
                 reward,
@@ -227,7 +213,7 @@ class ZXEnv(gym.Env):
                     "win_vs_pyzx": win_vs_pyzx,
                     "min_gates": self.min_gates,
                     "graph_obs": [self.policy_obs(), self.value_obs()],
-                    "final_circuit": self.best_episode_seen,
+                    "final_circuit": self.final_circuit,
                     "action_stats": [self.best_action_stats["pivb"], 
                                      self.best_action_stats["pivg"],
                                      self.best_action_stats["piv"],
