@@ -168,7 +168,7 @@ class AgentGNN(nn.Module):
         batch_id = torch.arange(x[0].num_graphs)
         action_id = act_ids[batch_id, action]
 
-        return action.T, action_id.T
+        return action.permute(*torch.arange(action.ndim - 1, -1, -1)), action_id.permute(*torch.arange(action_id.ndim - 1, -1, -1))
 
     def get_action_and_value(self, x, action=None, device="cpu", testing=False):
         
