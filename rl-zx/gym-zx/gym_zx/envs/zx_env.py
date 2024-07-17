@@ -253,6 +253,7 @@ class ZXEnv(gym.Env):
         self.episode_stats = {"pivb": 0 , "pivg":0, "piv":0, "lc": 0, "id":0, "gf":0}
         self.best_action_stats = {"pivb": 0 , "pivg":0, "piv":0 , "lc": 0, "id":0, "gf":0}
 
+        #12-qubit circuit generator 
         c = zx.generate.cquere_circuit(qubits=self.qubits,depth=self.depth, p_rz = 0.22, p_ry=0.28, p_rzz=0.42, 
                                        p_rx = 0.02, p_trz = 0.06, p_try = 0, p_trx = 0).to_basic_gates()
     

@@ -293,12 +293,11 @@ if __name__ == "__main__":
 
                 _, newlogprob, entropy, newvalue, logits, _ = agent.get_action_and_value(
                     (policies_batch, values_batch),
-                    b_actions.long()[mb_inds].T, device=device
+                    b_actions.long()[mb_inds].permute(*torch.arange(b_actions.long()[mb_inds].ndim - 1, -1, -1)), device=device
                 )  # training begins, here we pass minibatch action so the agent doesnt sample a new action
                 logratio = newlogprob - b_logprobs[mb_inds]  # logratio = log(newprob/oldprob)
                 ratio = logratio.exp()
-                torch.cuda.empty_cache() #remove cache after each minibatch
-            
+                torch.cuda.empty_cache()   
 
                 with torch.no_grad():
                     # calculate approx_kl http://joschu.net/blog/kl-approx.html
@@ -342,7 +341,7 @@ if __name__ == "__main__":
             if args.target_kl is not None:
                 if approx_kl > args.target_kl:
                     break
-
+            torch.cuda.empty_cache()   
         y_pred, y_true = b_values.cpu().numpy(), b_returns.cpu().numpy()
         var_y = np.var(y_true)
         explained_var = np.nan if var_y == 0 else 1 - np.var(y_true - y_pred) / var_y
@@ -443,7 +442,8 @@ if __name__ == "__main__":
         swap_gates = []
         pyzx_swap_gates = []
         wins_vs_pyzx = []
-    torch.save(agent.state_dict(), "state_dict_5x70_cquere_twoqubits.pt")    
+    torch.save(agent.state_dict(), "state_dict_5x70_cquere_twoqubits.pt") 
+    torch.cuda.empty_cache()   
     envs.close()
     writer.close()
     torch.cuda.empty_cache()
