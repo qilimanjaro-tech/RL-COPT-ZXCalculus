@@ -297,6 +297,8 @@ if __name__ == "__main__":
                 )  # training begins, here we pass minibatch action so the agent doesnt sample a new action
                 logratio = newlogprob - b_logprobs[mb_inds]  # logratio = log(newprob/oldprob)
                 ratio = logratio.exp()
+                torch.cuda.empty_cache() #remove cache after each minibatch
+            
 
                 with torch.no_grad():
                     # calculate approx_kl http://joschu.net/blog/kl-approx.html
@@ -335,6 +337,7 @@ if __name__ == "__main__":
                 loss.backward()
                 nn.utils.clip_grad_norm_(agent.parameters(), args.max_grad_norm)
                 optimizer.step()
+            torch.cuda.empty_cache() #free memory after completing an epoch
 
             if args.target_kl is not None:
                 if approx_kl > args.target_kl:
@@ -443,4 +446,5 @@ if __name__ == "__main__":
     torch.save(agent.state_dict(), "state_dict_5x70_cquere_twoqubits.pt")    
     envs.close()
     writer.close()
+    torch.cuda.empty_cache()
 
