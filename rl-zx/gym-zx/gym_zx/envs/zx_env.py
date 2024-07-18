@@ -32,7 +32,7 @@ class ZXEnv(gym.Env):
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.clifford = False
         self.qubits, self.depth = qubits, depth
-        self.shape = 500
+        self.shape = 600
         self.gate_type = "twoqubits"
 
         self.max_episode_len = 50
