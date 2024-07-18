@@ -336,6 +336,7 @@ if __name__ == "__main__":
                 loss.backward()
                 nn.utils.clip_grad_norm_(agent.parameters(), args.max_grad_norm)
                 optimizer.step()
+            torch.cuda.empty_cache() #free memory after completing an epoch
 
             if args.target_kl is not None:
                 if approx_kl > args.target_kl:
@@ -445,4 +446,5 @@ if __name__ == "__main__":
     torch.cuda.empty_cache()   
     envs.close()
     writer.close()
+    torch.cuda.empty_cache()
 

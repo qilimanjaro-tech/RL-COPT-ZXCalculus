@@ -256,8 +256,7 @@ class ZXEnv(gym.Env):
         #12-qubit circuit generator 
         c = zx.generate.cquere_circuit(qubits=self.qubits,depth=self.depth, p_rz = 0.22, p_ry=0.28, p_rzz=0.42, 
                                        p_rx = 0.02, p_trz = 0.06, p_try = 0, p_trx = 0).to_basic_gates()
-        rand_graph = c.to_graph()
-        
+    
         '''
         import os
         path = os.path.join('cquere','circuits', 'before', 'SrH_files')

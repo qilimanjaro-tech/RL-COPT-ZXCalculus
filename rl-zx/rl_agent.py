@@ -38,25 +38,22 @@ class AgentGNN(nn.Module):
         super().__init__()
 
         self.device = device
-        #obs_shape = envs.get_attr("shape")#3000
-        #self.obs_shape = obs_shape[0]
-        #qubits_list = envs.get_attr('qubits')#retrieve environemnt qubits
-        #self.qubits = qubits_list[0]
-        self.obs_shape = 500
+        self.obs_shape = 3000
         self.bin_required = int(np.ceil(np.log2(self.obs_shape)))
-        c_in_p = 17 #dimension policy obs
-        c_in_v = 12 #dimension value obs
+
+        c_in_p = 17
+        c_in_v = 12
         edge_dim = 7
         edge_dim_v = 2
         self.global_attention_critic = AttentionalAggregation(
             gate_nn=nn.Sequential(
                 nn.Linear(c_hidden, c_hidden),
-                nn.LeakyReLU(),
+                nn.ReLU(),
                 nn.Linear(c_hidden, c_hidden),
-                nn.LeakyReLU(),
+                nn.ReLU(),
                 nn.Linear(c_hidden, 1),
             ),
-            nn=nn.Sequential(nn.Linear(c_hidden, c_hidden_v), nn.LeakyReLU(), nn.Linear(c_hidden_v, c_hidden_v), nn.LeakyReLU()),
+            nn=nn.Sequential(nn.Linear(c_hidden, c_hidden_v), nn.ReLU(), nn.Linear(c_hidden_v, c_hidden_v), nn.ReLU()),
         )
 
         self.critic_gnn = geo_Sequential(
@@ -66,27 +63,27 @@ class AgentGNN(nn.Module):
                     geom_nn.GATv2Conv(c_in_v, c_hidden, edge_dim=edge_dim_v, add_self_loops=True),
                     "x, edge_index, edge_attr -> x",
                 ),
-                nn.LeakyReLU(),
+                nn.ReLU(),
                 (
                     geom_nn.GATv2Conv(c_hidden, c_hidden, edge_dim=edge_dim_v, add_self_loops=True),
                     "x, edge_index, edge_attr -> x",
                 ),
-                nn.LeakyReLU(),
+                nn.ReLU(),
                 (
                     geom_nn.GATv2Conv(c_hidden, c_hidden, edge_dim=edge_dim_v, add_self_loops=True),
                     "x, edge_index, edge_attr -> x",
                 ),
-                nn.LeakyReLU(),
+                nn.ReLU(),
                 (
                     geom_nn.GATv2Conv(c_hidden, c_hidden, edge_dim=edge_dim_v, add_self_loops=True),
                     "x, edge_index, edge_attr -> x",
                 ),
-                nn.LeakyReLU(),
+                nn.ReLU(),
                 (
                     geom_nn.GATv2Conv(c_hidden, c_hidden, edge_dim=edge_dim_v, add_self_loops=True),
                     "x, edge_index, edge_attr -> x",
                 ),
-                nn.LeakyReLU(),
+                nn.ReLU(),
             ],
         )
 
@@ -97,38 +94,38 @@ class AgentGNN(nn.Module):
                     geom_nn.GATv2Conv(c_in_p, c_hidden, edge_dim=edge_dim, add_self_loops=True),
                     "x, edge_index, edge_attr -> x",
                 ),
-                nn.LeakyReLU(),
+                nn.ReLU(),
                 (
                     geom_nn.GATv2Conv(c_hidden, c_hidden, edge_dim=edge_dim, add_self_loops=True),
                     "x, edge_index, edge_attr -> x",
                 ),
-                nn.LeakyReLU(),
+                nn.ReLU(),
                 (
                     geom_nn.GATv2Conv(c_hidden, c_hidden, edge_dim=edge_dim, add_self_loops=True),
                     "x, edge_index, edge_attr -> x",
                 ),
-                nn.LeakyReLU(),
+                nn.ReLU(),
                 (
                     geom_nn.GATv2Conv(c_hidden, c_hidden, edge_dim=edge_dim, add_self_loops=True),
                     "x, edge_index, edge_attr -> x",
                 ),
-                nn.LeakyReLU(),
+                nn.ReLU(),
                 (
                     geom_nn.GATv2Conv(c_hidden, c_hidden, edge_dim=edge_dim, add_self_loops=True),
                     "x, edge_index, edge_attr -> x",
                 ),
-                nn.LeakyReLU(),
+                nn.ReLU(),
                 (nn.Linear(c_hidden, c_hidden),),
-                nn.LeakyReLU(),
+                nn.ReLU(),
                 (nn.Linear(c_hidden, 1),),
             ],
         )
 
         self.critic_ff = nn.Sequential(
             nn.Linear(c_hidden_v, c_hidden_v),
-            nn.LeakyReLU(),
+            nn.ReLU(),
             nn.Linear(c_hidden_v, c_hidden_v),
-            nn.LeakyReLU(),
+            nn.ReLU(),
             nn.Linear(c_hidden_v, out_features=1),
         )
 
