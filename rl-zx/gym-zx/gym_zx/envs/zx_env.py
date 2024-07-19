@@ -117,11 +117,13 @@ class ZXEnv(gym.Env):
                 self.apply_rule(*self.pivot(act_node1, act_node2))
             else:
                 #act_node2 is the node connected to a boundary and the node that needs to be put phase 0 for the policy&value obs
+                edge_table, rem_vert, rem_edge,_ = self.pivot_gadget(act_node1, act_node2)
                 self.apply_rule(*self.pivot_gadget(act_node1, act_node2))
             action_id = 2
             node = [act_node1, act_node2]
             
         elif act_type == "GF":
+            edge_table, rem_vert, rem_edge,_ = self.merge_phase_gadgets(act_node1)
             self.apply_rule(*self.merge_phase_gadgets(act_node1))
             action_id = 6
             node = act_node1
@@ -135,8 +137,8 @@ class ZXEnv(gym.Env):
             reward = 0.0
             node = [-1]
             
-        policy_obs_dict = self.update_policy_obs(act_type, edge_table, rem_vert, rem_edge)
-        value_obs_dict = self.update_value_obs(act_type, edge_table, rem_vert, rem_edge)
+        policy_obs_dict = self.update_policy_obs(act_type, edge_table, rem_vert)
+        value_obs_dict = self.update_value_obs(act_type, edge_table, rem_vert)
         self.graph = self.graph.copy() #Relabel nodes due to PYZX not keeping track of node id properly.
         graph = self.graph.copy()
         graph.normalize()
@@ -232,7 +234,7 @@ class ZXEnv(gym.Env):
             )
 
         self.current_gates = new_gates
-        self.action = {act_type: node}
+        self.action = {act_type: node}#TODO
 
         return (
             self.graph,
@@ -311,11 +313,11 @@ class ZXEnv(gym.Env):
 
     def policy_obs(self):
         
-        """
+    
         graph_0 = zx.draw_matplotlib(self.graph, labels=True, figsize=(10,6))
         graph_0.savefig("graph"+str(self.count)+".png")
         self.count = self.count + 1  # Save the current figure
-        """
+        
         """Enters the graph in format ZX"""
         piv_nodes = self.pivot_info_dict.keys()
         lcomp_nodes = self.match_lcomp()
@@ -374,10 +376,10 @@ class ZXEnv(gym.Env):
             node_features.append(node_feature)
 
         # Relabel the nodes of the copied graph by adding n_nodes to each label
-        self.n_nodes = len(p_graph.nodes())
+        n_nodes = len(p_graph.nodes())
 
         # Create tracking variable of label node to include new action nodes
-        current_node = self.n_nodes
+        current_node = n_nodes
         edge_list = list(p_graph.edges)
         edge_features = []
         for edge in edge_list:
@@ -460,20 +462,19 @@ class ZXEnv(gym.Env):
         node_features.append(node_feature)
         identifier.append(self.shape * (self.shape + 1) + 1)
 
-        for j in range(self.n_nodes, current_node):
+        for j in range(n_nodes, current_node):
             # Other actions feed Stop Node
             edge_list.append((j, current_node))
             edge_feature = [0 for _ in range(self.number_edge_features_policy)]
             edge_feature[6] = 1.0
             edge_features.append(edge_feature)
-
         self.policy_obs_dict = {"node features": node_features,"edge_list":edge_list, "edge_features":edge_features }
         # Create tensor objects
         x = torch.tensor(node_features).view(-1, self.number_node_features_policy)
         x = x.type(torch.float32)
         edge_index = torch.tensor(edge_list).t().contiguous()
         edge_features = torch.tensor(edge_features).view(-1, self.number_edge_features_policy)
-        identifier[:self.n_nodes] = [-1] * self.n_nodes
+        identifier[:n_nodes] = [-1] *n_nodes
         identifier = torch.tensor(identifier)
         return (
             x.to(self.device),
@@ -862,6 +863,7 @@ class ZXEnv(gym.Env):
         rem_edges: List[ET] = []
         etab: Dict[ET, List[int]] = dict()
         m = [0, 0, 0, 0, 0]
+        self.phase_dict = {}
 
         m[0], m[1] = v0, v1
         m[2], m[3], _ = self.pivot_info_dict[(v0, v1)]
@@ -904,9 +906,12 @@ class ZXEnv(gym.Env):
                 for v in n[1 - i]:
                     if not self.graph.is_ground(v):
                         self.graph.add_to_phase(v, a)
+                        self.phase_dict[v] = a#track changes in phases
+                        
                 for v in n[2]:
                     if not self.graph.is_ground(v):
                         self.graph.add_to_phase(v, a)
+                        self.phase_dict[v] = a#track changes in phases
 
             if not m[i + 2]:
                 rem_verts.append(m[1 - i])  # type: ignore # if there is no boundary, the other vertex is destroyed
@@ -1206,38 +1211,33 @@ class ZXEnv(gym.Env):
             node_features.append(node_feature)
 
         return  {"node features": node_features ,"edge_list": edge_list, "edge_features": edge_features}
-    def update_policy_obs(self, act_type, node_list: List = [], edge_list: List[(Tuple)] = []):
+    def update_policy_obs(self, act_type,  edge_dict: Dict[ET, List[int]] = {}, 
+                          node_dict: Dict[ET, Fraction] = {}):
         
-        if node_list:
-            node_features = self.policy_obs_dict["node features"]
-            if act_type == "PVG":
-                n_nodes = 30
-                x = torch.tensor(node_features).view(-1, self.number_edge_features_policy)
-                x = x.type(torch.float32)
-                identifier[:n_nodes] = [-1] * n_nodes
-            identifier = torch.tensor(identifier)
-
-
-        if edges_list:
-            edges_list = self.policy_obs_dict["edge list"]
-
-
-
-        
-            edge_index = torch.tensor(edge_list).t().contiguous()
-            edge_features = torch.tensor(edge_features).view(-1, self.number_edge_features_policy)
-        
-        if not (node_list and edge_list): #just take the same old policy 
+        if not (node_dict and edge_dict): #just take the same old policy 
             return None
+        else:
+            edge_features = self.policy_obs_dict["edge_features"]
+            edge_list = self.policy_obs_dict["edge_list"]
+            #add connections/edges to the policy
+            for edge,edge_type in edge_dict.items(): 
+                edge_list.append(edge)
+                if edge_type == [0,1]: #Hadamard edge
+                    edge_feature = [0 for _ in range(self.number_edge_features_policy)]
+                    edge_feature[0] = 1.0
+                    edge_features.append(edge_feature)
+                else: #Simple Edge
+                    edge_feature = [0 for _ in range(self.number_edge_features_policy)]
+                    edge_feature[1] = 1.0
+                    edge_features.append(edge_feature)
+            #remove edges
+            pass
         
-        return (
-            x.to(self.device),
-            edge_index.to(self.device),
-            edge_features.to(self.device),
-            identifier.to(self.device),
-        )
+        
+        return None
     
-    def update_value_obs(self, act_type, node_list: List = [], edge_list: List[(Tuple)] = []):
+    def update_value_obs(self, act_type,  etab: Dict[ET, List[int]], 
+                         node_list: List = [], edge_list: List[(Tuple)] = []):
         pass
     def create_value_features_gadget(self, node_list, edge_list):
         "This is only to create the value data for the "
