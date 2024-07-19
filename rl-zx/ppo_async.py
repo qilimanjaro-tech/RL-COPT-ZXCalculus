@@ -111,7 +111,7 @@ if __name__ == "__main__":
     
     #Training size
     qubits = 5
-    depth = 70
+    depth = 25
     
     random.seed(args.seed)
     np.random.seed(args.seed)
