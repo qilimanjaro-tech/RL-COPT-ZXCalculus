@@ -6,6 +6,7 @@ import torch_geometric.nn as geom_nn
 
 from torch.distributions.categorical import Categorical
 from torch_geometric.nn import Sequential as geo_Sequential
+from torch_geometric.nn.aggr import AttentionalAggregation
 
 class CategoricalMasked(Categorical):
     def __init__(self, probs=None, logits=None, validate_args=None, masks=None, device="cpu"):
@@ -41,13 +42,13 @@ class AgentGNN(nn.Module):
         #self.obs_shape = obs_shape[0]
         #qubits_list = envs.get_attr('qubits')#retrieve environemnt qubits
         #self.qubits = qubits_list[0]
-        self.obs_shape = 500
+        self.obs_shape = 3000
         self.bin_required = int(np.ceil(np.log2(self.obs_shape)))
         c_in_p = 17 #dimension policy obs
         c_in_v = 12 #dimension value obs
         edge_dim = 7
         edge_dim_v = 2
-        self.global_attention_critic = geom_nn.GlobalAttention(
+        self.global_attention_critic = AttentionalAggregation(
             gate_nn=nn.Sequential(
                 nn.Linear(c_hidden, c_hidden),
                 nn.LeakyReLU(),
@@ -167,7 +168,7 @@ class AgentGNN(nn.Module):
         batch_id = torch.arange(x[0].num_graphs)
         action_id = act_ids[batch_id, action]
 
-        return action.T, action_id.T
+        return action.permute(*torch.arange(action.ndim - 1, -1, -1)), action_id.permute(*torch.arange(action_id.ndim - 1, -1, -1))
 
     def get_action_and_value(self, x, action=None, device="cpu", testing=False):
         
@@ -204,11 +205,11 @@ class AgentGNN(nn.Module):
             action_id = torch.tensor([0]).to(device)
             
         if testing:
-            return action.T, action_id.T
+            return action.permute(*torch.arange(action.ndim - 1, -1, -1)), action_id.permute(*torch.arange(action_id.ndim - 1, -1, -1))
         
         logprob = categoricals.log_prob(action)
         entropy = categoricals.entropy(device)
-        return action.T, logprob, entropy, values, torch.tensor(action_logits).to(device).reshape(-1, 1), action_id.T
+        return action.permute(*torch.arange(action.ndim - 1, -1, -1)), logprob, entropy, values, action_logits.clone().detach().to(device).reshape(-1, 1), action_id.permute(*torch.arange(action_id.ndim - 1, -1, -1))
 
     def get_value(self, x):
         values = self.critic(x)
