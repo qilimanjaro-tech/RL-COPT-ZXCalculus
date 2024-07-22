@@ -103,6 +103,7 @@ class ZXEnv(gym.Env):
             
             neighbours = list(self.graph.neighbors(act_node1))
             types = self.graph.types()
+            edge_table, rem_vert, rem_edge,_ = self.remove_ids(act_node1)
             self.apply_rule(*self.remove_ids(act_node1))
             if types[neighbours[0]] != zx.VertexType.BOUNDARY and types[neighbours[1]] != zx.VertexType.BOUNDARY:
                 self.apply_rule(*self.spider_fusion(neighbours))
@@ -468,7 +469,8 @@ class ZXEnv(gym.Env):
             edge_feature = [0 for _ in range(self.number_edge_features_policy)]
             edge_feature[6] = 1.0
             edge_features.append(edge_feature)
-        self.policy_obs_dict = {"node features": node_features,"edge_list":edge_list, "edge_features":edge_features }
+        self.policy_obs_dict = {"node features": node_features,"edge_list":edge_list, "edge_features":edge_features, 
+                                "num nodes": n_nodes, "actions": identifier[n_nodes:]}
         # Create tensor objects
         x = torch.tensor(node_features).view(-1, self.number_node_features_policy)
         x = x.type(torch.float32)
@@ -1217,6 +1219,9 @@ class ZXEnv(gym.Env):
         if not (node_dict and edge_dict): #just take the same old policy 
             return None
         else:
+            self.update_policy_nodes()
+            self.update_policy_phases()
+            self.update_policy_edges()
             edge_features = self.policy_obs_dict["edge_features"]
             edge_list = self.policy_obs_dict["edge_list"]
             #add connections/edges to the policy
@@ -1235,6 +1240,12 @@ class ZXEnv(gym.Env):
         
         
         return None
+    def update_policy_nodes(self):
+        pass
+    def update_policy_phases(self):
+        pass
+    def update_policy_edges(self):
+        pass
     
     def update_value_obs(self, act_type,  etab: Dict[ET, List[int]], 
                          node_list: List = [], edge_list: List[(Tuple)] = []):
