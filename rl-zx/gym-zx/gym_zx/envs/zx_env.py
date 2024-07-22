@@ -314,12 +314,13 @@ class ZXEnv(gym.Env):
 
     def policy_obs(self):
         
-    
+        
         graph_0 = zx.draw_matplotlib(self.graph, labels=True, figsize=(10,6))
         graph_0.savefig("graph"+str(self.count)+".png")
         self.count = self.count + 1  # Save the current figure
         
         """Enters the graph in format ZX"""
+        action_dict = {} #TODO
         piv_nodes = self.pivot_info_dict.keys()
         lcomp_nodes = self.match_lcomp()
         iden_nodes = self.match_ids()
@@ -408,6 +409,7 @@ class ZXEnv(gym.Env):
             edge_feature = [0 for _ in range(self.number_edge_features_policy)]
             edge_feature[2] = 1.0
             edge_features.append(edge_feature)
+            action_dict[node] = node * self.shape + node
 
             current_node += 1
 
@@ -421,6 +423,7 @@ class ZXEnv(gym.Env):
             edge_feature = [0 for _ in range(self.number_edge_features_policy)]
             edge_feature[3] = 1.0
             edge_features.append(edge_feature)
+            action_dict[node] = self.shape**2 + node
 
             current_node += 1
 
@@ -437,7 +440,7 @@ class ZXEnv(gym.Env):
             edge_feature[4] = 1.0
             edge_features.append(edge_feature)
             edge_features.append(edge_feature)
-
+            action_dict[(node1,node2)] = node1 * self.shape + node
             current_node += 1
 
         for idx, gadgetf in enumerate(self.gadget_fusion_ids):
@@ -446,7 +449,7 @@ class ZXEnv(gym.Env):
             node_feature[15] = 1.0
             node_features.append(node_feature)
             identifier.append(-(idx + 2))
-
+            action_dict[gadgetf] = -(idx + 2)
             for node in gadgetf:
                 graph_node = mapping[node]
                 edge_list.append((graph_node, current_node))
