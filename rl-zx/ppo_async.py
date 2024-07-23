@@ -168,10 +168,10 @@ if __name__ == "__main__":
 
     for update in range(1, num_updates + 1):
         # Annealing the rate if instructed to do so.
-        """
+
         if update % 50 == 1:
             torch.save(agent.state_dict(), "state_dict_" + str(global_step) + "model5x70_twoqubits_new.pt")
-        """
+        
         if args.anneal_lr:
             frac = max(1.0 / 100, 1.0 - (update - 1.0) / (num_updates * 5.0 / 6))
             lrnow = frac * args.learning_rate
