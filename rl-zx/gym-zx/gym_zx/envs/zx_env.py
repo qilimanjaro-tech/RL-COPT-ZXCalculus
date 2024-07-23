@@ -128,6 +128,8 @@ class ZXEnv(gym.Env):
             self.apply_rule(*self.merge_phase_gadgets(act_node1))
             action_id = 6
             node = act_node1
+            policy_obs_dict = self.update_policy_obs(act_type, edge_table, rem_vert)
+            value_obs_dict = self.update_value_obs(act_type, edge_table, rem_vert)
             
         elif act_type == "STOP":
             action_id = 0
@@ -137,9 +139,8 @@ class ZXEnv(gym.Env):
             action_id = 5  
             reward = 0.0
             node = [-1]
-            
-        policy_obs_dict = self.update_policy_obs(act_type, edge_table, rem_vert)
-        value_obs_dict = self.update_value_obs(act_type, edge_table, rem_vert)
+        #what do we do in the STOP case?
+        
         self.graph = self.graph.copy() #Relabel nodes due to PYZX not keeping track of node id properly.
         graph = self.graph.copy()
         graph.normalize()
