@@ -66,7 +66,7 @@ class ZXEnv(gym.Env):
         elif int(action) < 0:
             act_type = "GF"
             self.episode_stats["gf"] += 1 
-            act_node1 = self.gadget_fusion_ids[int(np.abs(action) - 2)] # Gadget fusion ids  start at 2
+            act_node1 = self.gadget_fusion_ids[int(np.abs(action[0]) - 2)] # Gadget fusion ids  start at 2
         else:
             act_node1, act_node2 = int(action // self.shape), int(action - action // self.shape * self.shape)
             if act_node1 == act_node2:
@@ -115,10 +115,16 @@ class ZXEnv(gym.Env):
             pv_type = self.pivot_info_dict[(act_node1, act_node2)][-1]
             if pv_type == 0:
                 edge_table, rem_vert, rem_edge,_ = self.pivot(act_node1,act_node2)
+                neighbours = [list(self.graph.neighbors(rem)) for rem in rem_vert]
+                rem_node = (rem_vert, neighbours)
+                policy_obs_dict = self.update_policy_obs(act_type, edge_dict = edge_table, rem_node=rem_node)
                 self.apply_rule(*self.pivot(act_node1, act_node2))
             else:
                 #act_node2 is the node connected to a boundary and the node that needs to be put phase 0 for the policy&value obs
                 edge_table, rem_vert, rem_edge,_ = self.pivot_gadget(act_node1, act_node2)
+                neighbours = [list(self.graph.neighbors(rem)) for rem in rem_vert]
+                rem_node = (rem_vert, neighbours)
+                policy_obs_dict = self.update_policy_obs(act_type, edge_dict = edge_table, rem_node=rem_node)
                 self.apply_rule(*self.pivot_gadget(act_node1, act_node2))
             action_id = 2
             node = [act_node1, act_node2]
@@ -128,8 +134,7 @@ class ZXEnv(gym.Env):
             self.apply_rule(*self.merge_phase_gadgets(act_node1))
             action_id = 6
             node = act_node1
-            policy_obs_dict = self.update_policy_obs(act_type, edge_table, rem_vert)
-            value_obs_dict = self.update_value_obs(act_type, edge_table, rem_vert)
+            
             
         elif act_type == "STOP":
             action_id = 0
@@ -473,8 +478,8 @@ class ZXEnv(gym.Env):
             edge_feature = [0 for _ in range(self.number_edge_features_policy)]
             edge_feature[6] = 1.0
             edge_features.append(edge_feature)
-        self.policy_obs_dict = {"node features": node_features,"edge_list":edge_list, "edge_features":edge_features, 
-                                "num nodes": n_nodes, "actions": identifier[n_nodes:]}
+        self.policy_obs_dict = {"node_list": identifier[:n_nodes], "node_features": node_features,"edge_list":edge_list, "edge_features":edge_features, 
+                                "num_nodes": n_nodes, "actions": identifier[n_nodes:]}
         # Create tensor objects
         x = torch.tensor(node_features).view(-1, self.number_node_features_policy)
         x = x.type(torch.float32)
@@ -1217,13 +1222,13 @@ class ZXEnv(gym.Env):
             node_features.append(node_feature)
 
         return  {"node features": node_features ,"edge_list": edge_list, "edge_features": edge_features}
-    def update_policy_obs(self, act_type,  edge_dict: Dict[ET, List[int]] = {}, 
-                          node_dict: Dict[ET, Fraction] = {}):
+    def update_policy_obs(self, act_type: str, edge_dict: Dict[ET, List[int]] = {}, 
+                          phases_dict: Dict[ET, Fraction] = {}, rem_node: Tuple[ET, List[ET]]=()):
         
-        if not (node_dict and edge_dict): #just take the same old policy 
+        if (phases_dict and edge_dict and rem_node): #just take the same old policy 
             return None
         else:
-            self.update_policy_nodes()
+            self.update_policy_nodes(rem_node)
             self.update_policy_phases()
             self.update_policy_edges()
             edge_features = self.policy_obs_dict["edge_features"]
@@ -1240,12 +1245,43 @@ class ZXEnv(gym.Env):
                     edge_feature[1] = 1.0
                     edge_features.append(edge_feature)
             #remove edges
-            pass
-        
+           
         
         return None
-    def update_policy_nodes(self):
-        pass
+    def update_policy_nodes(self,rem_node: Tuple[List[ET], List[ET]]):
+        #TODO add gadgets nodes and edges
+        "This method removes the vertexs and the edges beloinging and adds to the policy the nodes added if gadgetization happened"
+        rem_vert, neighbors = rem_node[0], rem_node[1]
+        node_features = self.policy_obs_dict["node_features"]
+        #remove vertices
+        node_list = self.policy_obs_dict["node_list"]
+        for vert in rem_vert:
+            idx = node_list.index(vert)
+            node_features.pop(idx)
+        self.policy_obs_dict["node_features"] = node_features #update node features list
+        self.policy_obs_dict["node_list"] =  node_list #update node list
+
+        #remove edges connected to this node
+        edge_list = self.policy_obs_dict["edge_list"]
+        edge_features = self.policy_obs_dict["edge_features"]
+        for neigh, vert in zip(neighbors,rem_vert):
+            for n in neigh:
+                edge = (n,vert) 
+                if edge in edge_list:
+                    idx = edge_list.index(edge)
+                    edge_list.pop(idx)
+
+                elif (vert,n) in edge_list:
+                    idx = edge_list.index(edge)
+                    edge_list.pop(idx)
+                else:
+                    continue
+                edge_features.pop(idx)
+
+        self.policy_obs_dict["edge_list"]= edge_list
+        self.policy_obs_dict["edge_features"] = edge_features 
+
+
     def update_policy_phases(self):
         pass
     def update_policy_edges(self):
