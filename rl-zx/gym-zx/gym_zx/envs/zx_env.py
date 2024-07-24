@@ -35,7 +35,7 @@ class ZXEnv(gym.Env):
         self.shape = 600
         self.gate_type = "twoqubits"
 
-        self.max_episode_len = 50
+        self.max_episode_len = 1000
         self.cumulative_reward_episodes = 0
         self.win_episodes = 0
         self.max_compression = 35
@@ -253,25 +253,22 @@ class ZXEnv(gym.Env):
         self.episode_stats = {"pivb": 0 , "pivg":0, "piv":0, "lc": 0, "id":0, "gf":0}
         self.best_action_stats = {"pivb": 0 , "pivg":0, "piv":0 , "lc": 0, "id":0, "gf":0}
 
+        '''
         #12-qubit circuit generator 
         c = zx.generate.cquere_circuit(qubits=self.qubits,depth=self.depth, p_rz = 0.22, p_ry=0.28, p_rzz=0.42, 
-                                       p_rx = 0.02, p_trz = 0.06, p_try = 0, p_trx = 0).to_basic_gates()
-    
+                                   p_rx = 0.02, p_trz = 0.06, p_try = 0, p_trx = 0).to_basic_gates()
         '''
+    
+        
         import os
         path = os.path.join('cquere','circuits', 'before', 'SrH_files')
-        geo = "1.9961"
-        path = os.path.join('cquere', 'circuits', 'before')
+        #geo = "1.9961"
+        #path = os.path.join('cquere', 'circuits', 'before')
         #c = zx.Circuit.from_qasm_file(os.path.join(path,"SrH_10q_"+geo+".qasm")).to_basic_gates()
-        c = zx.Circuit.from_qasm_file(os.path.join(path,"10q-SrH-ckt.qasm")).to_basic_gates()
+        c = zx.Circuit.from_qasm_file("/home/jnogue/qilimanjaro/Copt-cquere/rl-zx/cquere/circuits/before/SrH_2.1461_12q.qasm").to_basic_gates()
         g = c.to_graph()         
         c = zx.optimize.basic_optimization(zx.Circuit.from_graph(g.copy()).split_phase_gates())
-    
-        g = zx.generate.cliffordT(
-               self.qubits, self.depth, p_t=0.17, p_s=0.24, p_hsh=0.25, 
-            )
-        c = zx.Circuit.from_graph(g)
-        '''
+        
         self.no_opt_stats = self.get_data(c)
         self.initial_depth = c.depth()
         
