@@ -124,7 +124,8 @@ class ZXEnv(gym.Env):
                 edge_table, rem_vert, rem_edge,_ = self.pivot_gadget(act_node1, act_node2)
                 neighbours = [list(self.graph.neighbors(rem)) for rem in rem_vert]
                 rem_node = (rem_vert, neighbours)
-                policy_obs_dict = self.update_policy_obs(act_type, edge_dict = edge_table, rem_node=rem_node)
+                gadget=True
+                policy_obs_dict = self.update_policy_obs(act_type, edge_dict = edge_table, rem_node=rem_node, gadget=gadget)
                 self.apply_rule(*self.pivot_gadget(act_node1, act_node2))
             action_id = 2
             node = [act_node1, act_node2]
@@ -846,6 +847,7 @@ class ZXEnv(gym.Env):
         edge_table = dict()
         vertice = []
         vertice.append(node)
+        self.phases_dict = {}
         n = len(neighbors)
         if phase.numerator == 1:
             self.graph.scalar.add_phase(Fraction(1, 4))
@@ -854,6 +856,8 @@ class ZXEnv(gym.Env):
         self.graph.scalar.add_power((n - 2) * (n - 1) // 2)
         for i in range(n):
             self.graph.add_to_phase(neighbors[i], -phase)
+            self.phases_dict[neighbors[i]] = -phase
+
             for j in range(i + 1, n):
                 edge_neigh = self.graph.edge(neighbors[i], neighbors[j])  # edge type between neighbours
                 he = edge_table.get(edge_neigh, [0, 0])[1]
@@ -874,7 +878,7 @@ class ZXEnv(gym.Env):
         rem_edges: List[ET] = []
         etab: Dict[ET, List[int]] = dict()
         m = [0, 0, 0, 0, 0]
-        self.phase_dict = {}
+        self.phases_dict = {}
 
         m[0], m[1] = v0, v1
         m[2], m[3], _ = self.pivot_info_dict[(v0, v1)]
@@ -917,12 +921,12 @@ class ZXEnv(gym.Env):
                 for v in n[1 - i]:
                     if not self.graph.is_ground(v):
                         self.graph.add_to_phase(v, a)
-                        self.phase_dict[v] = a#track changes in phases
+                        self.phases_dict[v] = a#track changes in phases
                         
                 for v in n[2]:
                     if not self.graph.is_ground(v):
                         self.graph.add_to_phase(v, a)
-                        self.phase_dict[v] = a#track changes in phases
+                        self.phases_dict[v] = a#track changes in phases
 
             if not m[i + 2]:
                 rem_verts.append(m[1 - i])  # type: ignore # if there is no boundary, the other vertex is destroyed
@@ -981,8 +985,8 @@ class ZXEnv(gym.Env):
         #graph_0.savefig("graph_gadget"+str(self.count)+".png")
         
         
-        self.policy_features = self.create_policy_features_gadget([vp,v0], edge_list)
-        self.value_features = self.create_value_features_gadget([vp,v0], edge_list)
+        self.policy_features_gadget = self.create_policy_features_gadget([vp,v0], edge_list)
+        self.value_features_gadget = self.create_value_features_gadget([vp,v0], edge_list)
         #Vertex V will be erased so we don't need to create its policy and value features.
         return 
 
@@ -1049,6 +1053,7 @@ class ZXEnv(gym.Env):
         n = vertexs[0]
         gad = list(vertexs[1:])
         gadgets = self.gadgets
+        self.phases_dict = {}
 
         v = gadgets[n]
         if len(gad) == 0:
@@ -1065,8 +1070,11 @@ class ZXEnv(gym.Env):
                     if self.graph.phase_tracking:
                         self.graph.phase_negate(gadgets[w])
             self.graph.scalar.add_power(-((par_num - 1) * len(gad)))
+        #TODO track phases
         self.graph.set_phase(v, phase)
         self.graph.set_phase(n, 0)
+        self.phases_dict[v] = phase
+        self.phases_dict[n] = 0
         othertargets = [gadgets[w] for w in gad]
         rem.extend(gad)
         rem.extend(othertargets)
@@ -1221,14 +1229,23 @@ class ZXEnv(gym.Env):
                 node_feature[10] = 1.0
             node_features.append(node_feature)
 
-        return  {"node features": node_features ,"edge_list": edge_list, "edge_features": edge_features}
+        nodes_to_add = len(node_list)
+        last_node = self.policy_obs_dict["node_list"][-1]
+        node_list = []
+        for _ in range(nodes_to_add):
+            last_node+=1 
+            node_list.append(last_node)
+
+        return  {"node_features": node_features, "node_list":node_list, "edge_list": edge_list, "edge_features": edge_features}
+    
+
     def update_policy_obs(self, act_type: str, edge_dict: Dict[ET, List[int]] = {}, 
-                          phases_dict: Dict[ET, Fraction] = {}, rem_node: Tuple[ET, List[ET]]=()):
+                          phases_dict: Dict[ET, Fraction] = {}, rem_node: Tuple[ET, List[ET]]=(), gadget: bool = False):
         
         if (phases_dict and edge_dict and rem_node): #just take the same old policy 
             return None
         else:
-            self.update_policy_nodes(rem_node)
+            self.update_policy_nodes(rem_node, gadget)
             self.update_policy_phases()
             self.update_policy_edges()
             edge_features = self.policy_obs_dict["edge_features"]
@@ -1248,9 +1265,32 @@ class ZXEnv(gym.Env):
            
         
         return None
-    def update_policy_nodes(self,rem_node: Tuple[List[ET], List[ET]]):
-        #TODO add gadgets nodes and edges
+    def update_policy_nodes(self,rem_node: Tuple[List[VT], List[ET]], gadget:bool=False):
         "This method removes the vertexs and the edges beloinging and adds to the policy the nodes added if gadgetization happened"
+        if gadget:
+            #add nodes and edges of the gadgetization
+            keys_to_extend = ["node_features", "node_list", "edge_list", "edge_features"]
+            for key in keys_to_extend:
+                self.policy_obs_dict[key].extend(self.policy_features_gadget[key])
+
+        #track phases
+        node_list = self.policy_obs_dict["node_list"]
+        phases = [0, Fraction(1,4), Fraction(1,2), Fraction(3,4), Fraction(1,1), Fraction(5,4), Fraction(3,2), Fraction(7,4)]
+        for vertex, phase in enumerate(self.phases_dict):
+            idx = node_list.index(vertex)
+            node_feature = self.policy_obs_dict["node_features"][idx]
+            index = np.argmax(node_feature)
+            oh_phase_idx = int((phases[index]+phase) / (0.25))
+            if oh_phase_idx not in range(1,8):
+                
+                node_feature[16] = 1.0
+            else:
+                node_feature[oh_phase_idx] = 1.0
+            node_feature[index] = 0
+            self.policy_obs_dict["node_features"][idx] = node_feature
+
+
+
         rem_vert, neighbors = rem_node[0], rem_node[1]
         node_features = self.policy_obs_dict["node_features"]
         #remove vertices
@@ -1266,16 +1306,13 @@ class ZXEnv(gym.Env):
         edge_features = self.policy_obs_dict["edge_features"]
         for neigh, vert in zip(neighbors,rem_vert):
             for n in neigh:
-                edge = (n,vert) 
-                if edge in edge_list:
-                    idx = edge_list.index(edge)
+                if (n,vert) in edge_list:
+                    idx = edge_list.index((n,vert))
                     edge_list.pop(idx)
 
                 elif (vert,n) in edge_list:
-                    idx = edge_list.index(edge)
+                    idx = edge_list.index((vert,n))
                     edge_list.pop(idx)
-                else:
-                    continue
                 edge_features.pop(idx)
 
         self.policy_obs_dict["edge_list"]= edge_list
