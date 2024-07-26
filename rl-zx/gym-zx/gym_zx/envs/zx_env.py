@@ -153,7 +153,7 @@ class ZXEnv(gym.Env):
             self.final_circuit = circ 
             self.opt_episode_len = self.episode_len
             self.best_action_stats = copy.deepcopy(self.episode_stats)
-            #self.circuit_up_to_perm = zx.extract_circuit(graph.copy(), up_to_perm=False)
+            self.circuit_up_to_perm = zx.extract_circuit(graph.copy(), up_to_perm=False)
 
 
         reward += (self.current_gates - new_gates) / self.max_compression
