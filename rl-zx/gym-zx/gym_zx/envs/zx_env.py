@@ -152,9 +152,10 @@ class ZXEnv(gym.Env):
             node = [-1]
         #what do we do in the STOP case?
         if action_id not in [0,5]:
-            policy_obs_dict = self.update_policy_obs(act_type, edge_dict = edge_table, rem_node=rem_node)
-        self.graph = self.graph.copy() #Relabel nodes due to PYZX not keeping track of node id properly.
-        graph = self.graph.copy()
+            policy_obs_dict = self.update_policy(act_nodes = node, edge_dict = edge_table, rem_node=rem_node)
+        #self.graph = self.graph.copy() #Relabel nodes due to PYZX not keeping track of node id properly.
+        #graph = self.graph.copy()
+        graph = self.graph
         graph.normalize()
         
         try:
@@ -592,7 +593,7 @@ class ZXEnv(gym.Env):
             hence can not all be applied at once. Defaults to False.
         :rtype: List of 2-tuples ``(vertex, neighbors)``.
         """
-        if vertexf is not None: candidates = set([v for v in self.graph.vertices() if vertexf(v)])
+        if vertexf is not None: candidates = [vertexf]
         else: candidates = self.graph.vertex_set()
         candidates_left = []
         phases = self.graph.phases()
@@ -668,7 +669,8 @@ class ZXEnv(gym.Env):
         :rtype: List of 4-tuples. See :func:`pivot` for the details.
         """
         if matchf is not None:
-            candidates = set([e for e in self.graph.edges() if matchf(e)])
+            candidates = set((matchf, i) for i in self.graph.neighbors(matchf))
+            #candidates = set([e for e in self.graph.edges() if matchf(e)])
         else:
             candidates = self.graph.edge_set()
 
@@ -732,7 +734,8 @@ class ZXEnv(gym.Env):
         Pauli vertices, it looks for a pair of an interior Pauli vertex and an
         interior non-Clifford vertex in order to gadgetize the non-Clifford vertex."""
         if matchf is not None:
-            candidates = set([e for e in self.graph.edges() if matchf(e)])
+            candidates = set((matchf, i) for i in self.graph.neighbors(matchf))
+            #candidates = set([e for e in self.graph.edges() if matchf(e)])
         else:
             candidates = self.graph.edge_set()
 
@@ -795,7 +798,8 @@ class ZXEnv(gym.Env):
         Pauli vertices, it looks for a pair of an interior Pauli vertex and a
         boundary non-Pauli vertex in order to gadgetize the non-Pauli vertex."""
         if matchf is not None:
-            candidates = set([v for v in self.graph.vertices() if matchf(v)])
+            candidates = set((matchf, i) for i in self.graph.neighbors(matchf))
+            #candidates = set([v for v in self.graph.vertices() if matchf(v)])
         else:
             candidates = self.graph.vertex_set()
 
@@ -1010,7 +1014,8 @@ class ZXEnv(gym.Env):
         4.leaf_dict is a dictionary that maps each phase gadget to its corresponding phase node
         """
         if vertexf is not None:
-            candidates = set([v for v in self.graph.vertices() if vertexf(v)])
+            candidates = set(vertexf)
+            #candidates = set([v for v in self.graph.vertices() if vertexf(v)])
         else:
             candidates = self.graph.vertex_set()
         gadget_info_dict = {}
@@ -1105,6 +1110,7 @@ class ZXEnv(gym.Env):
             self.graph.set_phase(v0, 0)
             self.graph.set_ground(v0)
         else:
+            #TODO track phases
             self.graph.add_to_phase(v0, self.graph.phase(v1))
         if self.graph.phase_tracking:
             self.graph.fuse_phases(v0, v1)
@@ -1140,8 +1146,9 @@ class ZXEnv(gym.Env):
             etab[e][1] += 1
         return (etab, [node], [], False)
 
-    def match_ids(self):
-        candidates = self.graph.vertex_set()
+    def match_ids(self, vertexf: Optional[VT] = None):
+        if vertexf is not None: candidates = set(vertexf)
+        else: candidates = self.graph.vertex_set()
         types = self.graph.types()
         phases = self.graph.phases()
         m = []
@@ -1246,33 +1253,21 @@ class ZXEnv(gym.Env):
         return  {"node_features": node_features, "node_list":node_list, "edge_list": edge_list, "edge_features": edge_features}
     
 
-    def update_policy_obs(self, act_type: str, edge_dict: Dict[ET, List[int]] = {}, 
+    def update_policy_obs(self, act_node, edge_dict: Dict[ET, List[int]] = {}, 
                            rem_node: Tuple[ET, List[ET]]=()):
         
         if not (edge_dict and rem_node): #just take the same old policy 
             return None
         else:
             self.update_policy_nodes(rem_node)
-            self.update_policy_phases()
-            self.update_policy_edges()
-            edge_features = self.policy_obs_dict["edge_features"]
-            edge_list = self.policy_obs_dict["edge_list"]
-            #add connections/edges to the policy
-            for edge,edge_type in edge_dict.items(): 
-                edge_list.append(edge)
-                if edge_type == [0,1]: #Hadamard edge
-                    edge_feature = [0 for _ in range(self.number_edge_features_policy)]
-                    edge_feature[0] = 1.0
-                    edge_features.append(edge_feature)
-                else: #Simple Edge
-                    edge_feature = [0 for _ in range(self.number_edge_features_policy)]
-                    edge_feature[1] = 1.0
-                    edge_features.append(edge_feature)
+            self.update_policy_edges(edge_dict)
+            self.update_actions(act_node)
+            
             #remove edges
            
         
         return None
-    def update_policy_nodes(self,rem_node: Tuple[List[VT], List[ET]]):
+    def update_policy(self,act_nodes:List[VT], rem_node: Tuple[List[VT], List[ET]], edge_dict: Dict[Tuple[ET], List]):
         "This method removes the vertexs and the edges beloinging and adds to the policy the nodes added if gadgetization happened"
         if self.gadget:
             #add nodes and edges of the gadgetization
@@ -1298,39 +1293,93 @@ class ZXEnv(gym.Env):
                 self.policy_obs_dict["node_features"][idx] = node_feature
 
 
+        #remove nodes after rule application
+        if rem_node:
+            rem_vert, neighbors = rem_node[0], rem_node[1]
+            node_features = self.policy_obs_dict["node_features"]
+            #remove vertices
+            node_list = self.policy_obs_dict["node_list"]
+            for vert in rem_vert:
+                idx = node_list.index(vert)
+                node_features.pop(idx)
+            self.policy_obs_dict["node_features"] = node_features #update node features list
+            self.policy_obs_dict["node_list"] =  node_list #update node list
 
-        rem_vert, neighbors = rem_node[0], rem_node[1]
-        node_features = self.policy_obs_dict["node_features"]
-        #remove vertices
-        node_list = self.policy_obs_dict["node_list"]
-        for vert in rem_vert:
-            idx = node_list.index(vert)
-            node_features.pop(idx)
-        self.policy_obs_dict["node_features"] = node_features #update node features list
-        self.policy_obs_dict["node_list"] =  node_list #update node list
+            #remove edges connected to this node
+            edge_list = self.policy_obs_dict["edge_list"]
+            edge_features = self.policy_obs_dict["edge_features"]
+            for neigh, vert in zip(neighbors,rem_vert):
+                for n in neigh:
+                    if (n,vert) in edge_list:
+                        idx = edge_list.index((n,vert))
+                        edge_list.pop(idx)
 
-        #remove edges connected to this node
-        edge_list = self.policy_obs_dict["edge_list"]
-        edge_features = self.policy_obs_dict["edge_features"]
-        for neigh, vert in zip(neighbors,rem_vert):
-            for n in neigh:
-                if (n,vert) in edge_list:
-                    idx = edge_list.index((n,vert))
-                    edge_list.pop(idx)
+                    elif (vert,n) in edge_list:
+                        idx = edge_list.index((vert,n))
+                        edge_list.pop(idx)
+                    edge_features.pop(idx)
 
-                elif (vert,n) in edge_list:
-                    idx = edge_list.index((vert,n))
-                    edge_list.pop(idx)
-                edge_features.pop(idx)
+        #add new connections. The edge is added if not found and deleted otherwhise.
+        if edge_dict:
+            for (v1,v2),edge_type in edge_dict.items(): 
+                if ((v1,v2) and (v2,v1)) not in edge_list:
+                    edge_list.append((v1,v2))
+                    if edge_type == [0,1]: #Hadamard edge
+                        edge_feature = [0 for _ in range(self.number_edge_features_policy)]
+                        edge_feature[0] = 1.0
+                        edge_features.append(edge_feature)
+                    else: #Simple Edge
+                        edge_feature = [0 for _ in range(self.number_edge_features_policy)]
+                        edge_feature[1] = 1.0
+                        edge_features.append(edge_feature)
+                else: 
+                    index = edge_list.index((v1,v2))
+                    edge_list.pop(index)
+                    edge_features.pop(index)
+        #add new actions 
+        candidate_nodes = [item for sublist in neighbors for item in sublist]
+       
+        for node in candidate_nodes:
+                match_lcomp = self.match_lcomp(vertexf=node)
+                match_piv = self.match_pivot_parallel(matchf=node)
+                match_piv_gadget = self.match_pivot_gadget(matchf = node)
+                match_piv_b = self.match_pivot_boundary(matchf = node)
+                match_ids = self.match_ids(matchf = node)
+              
+                match_phase_gad = self.match_phase_gadgets(vertexf = node)
+            
+
+
+
+
 
         self.policy_obs_dict["edge_list"]= edge_list
         self.policy_obs_dict["edge_features"] = edge_features 
 
-
-    def update_policy_phases(self):
-        pass
-    def update_policy_edges(self):
-        pass
+    def update_policy_edges(self, edge_dict):
+        """If the edge is in the edge list, we eliminate it, otherwhise we append it"""
+        edge_features = self.policy_obs_dict["edge_features"]
+        edge_list = self.policy_obs_dict["edge_list"]
+        #add connections/edges to the policy
+        for (v1,v2),edge_type in edge_dict.items(): 
+            if ((v1,v2) and (v2,v1)) not in edge_list:
+                edge_list.append((v1,v2))
+                if edge_type == [0,1]: #Hadamard edge
+                    edge_feature = [0 for _ in range(self.number_edge_features_policy)]
+                    edge_feature[0] = 1.0
+                    edge_features.append(edge_feature)
+                else: #Simple Edge
+                    edge_feature = [0 for _ in range(self.number_edge_features_policy)]
+                    edge_feature[1] = 1.0
+                    edge_features.append(edge_feature)
+            else: 
+                index = edge_list.index((v1,v2))
+                edge_list.pop(index)
+                edge_features.pop(index)
+            
+        self.policy_obs_dict["edge_list"]= edge_list
+        self.policy_obs_dict["edge_features"] = edge_features 
+    
     
     def update_value_obs(self, act_type,  etab: Dict[ET, List[int]], 
                          node_list: List = [], edge_list: List[(Tuple)] = []):
