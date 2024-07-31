@@ -120,13 +120,13 @@ class ZXEnv(gym.Env):
             pv_type = self.pivot_info_dict[(act_node1, act_node2)][-1]
             if pv_type == 0:
                 edge_table, rem_vert, rem_edge,_ = self.pivot(act_node1,act_node2)
-                neighbours = [list(self.graph.neighbors(rem)) for rem in rem_vert]
+                neighbours = [list(filter(lambda x: x not in rem_vert, self.graph.neighbors(rem))) for rem in rem_vert]
                 rem_node = (rem_vert, neighbours)
                 self.apply_rule(*self.pivot(act_node1, act_node2))
             else:
                 #act_node2 is the node connected to a boundary and the node that needs to be put phase 0 for the policy&value obs
                 edge_table, rem_vert, rem_edge,_ = self.pivot_gadget(act_node1, act_node2)
-                neighbours = [list(self.graph.neighbors(rem)) for rem in rem_vert]
+                neighbours = [list(filter(lambda x: x not in rem_vert, self.graph.neighbors(rem))) for rem in rem_vert]
                 rem_node = (rem_vert, neighbours)
                 self.gadget = True
                 self.apply_rule(*self.pivot_gadget(act_node1, act_node2))
@@ -669,8 +669,7 @@ class ZXEnv(gym.Env):
         :rtype: List of 4-tuples. See :func:`pivot` for the details.
         """
         if matchf is not None:
-            candidates = set((matchf, i) for i in self.graph.neighbors(matchf))
-            #candidates = set([e for e in self.graph.edges() if matchf(e)])
+            candidates = [(matchf, i) if (matchf, i) in self.graph.edge_set() else (i, matchf) for i in self.graph.neighbors(matchf)]
         else:
             candidates = self.graph.edge_set()
 
@@ -734,8 +733,7 @@ class ZXEnv(gym.Env):
         Pauli vertices, it looks for a pair of an interior Pauli vertex and an
         interior non-Clifford vertex in order to gadgetize the non-Clifford vertex."""
         if matchf is not None:
-            candidates = set((matchf, i) for i in self.graph.neighbors(matchf))
-            #candidates = set([e for e in self.graph.edges() if matchf(e)])
+            candidates = [(matchf, i) if (matchf, i) in self.graph.edge_set() else (i, matchf) for i in self.graph.neighbors(matchf)]
         else:
             candidates = self.graph.edge_set()
 
@@ -798,7 +796,9 @@ class ZXEnv(gym.Env):
         Pauli vertices, it looks for a pair of an interior Pauli vertex and a
         boundary non-Pauli vertex in order to gadgetize the non-Pauli vertex."""
         if matchf is not None:
-            candidates = set((matchf, i) for i in self.graph.neighbors(matchf))
+            candidates = [matchf]
+
+
             #candidates = set([v for v in self.graph.vertices() if matchf(v)])
         else:
             candidates = self.graph.vertex_set()
@@ -1014,7 +1014,7 @@ class ZXEnv(gym.Env):
         4.leaf_dict is a dictionary that maps each phase gadget to its corresponding phase node
         """
         if vertexf is not None:
-            candidates = set(vertexf)
+            candidates = [vertexf]
             #candidates = set([v for v in self.graph.vertices() if vertexf(v)])
         else:
             candidates = self.graph.vertex_set()
@@ -1147,7 +1147,7 @@ class ZXEnv(gym.Env):
         return (etab, [node], [], False)
 
     def match_ids(self, vertexf: Optional[VT] = None):
-        if vertexf is not None: candidates = set(vertexf)
+        if vertexf is not None: candidates = [vertexf]
         else: candidates = self.graph.vertex_set()
         types = self.graph.types()
         phases = self.graph.phases()
@@ -1344,8 +1344,7 @@ class ZXEnv(gym.Env):
                 match_piv = self.match_pivot_parallel(matchf=node)
                 match_piv_gadget = self.match_pivot_gadget(matchf = node)
                 match_piv_b = self.match_pivot_boundary(matchf = node)
-                match_ids = self.match_ids(matchf = node)
-              
+                match_ids = self.match_ids(vertexf = node)
                 match_phase_gad = self.match_phase_gadgets(vertexf = node)
             
 
