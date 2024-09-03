@@ -110,8 +110,8 @@ if __name__ == "__main__":
     )
     
     #Training size
-    qubits = 4
-    depth = 20
+    qubits = 5
+    depth = 70
     
     random.seed(args.seed)
     np.random.seed(args.seed)
@@ -194,8 +194,10 @@ if __name__ == "__main__":
                 values[step] = value.flatten()
             actions[step] = action
             logprobs[step] = logprob
-
+            
             next_obs, reward, done, deprecated, info = envs.step(action_ids.cpu().numpy())
+            
+        
             rewards[step] = torch.tensor(reward).to(device).view(-1)
 
             next_done = torch.Tensor(done).to(device)
@@ -391,7 +393,7 @@ if __name__ == "__main__":
         writer.add_histogram("histograms/reward_distribution", np.array(cumulative_reward), global_step)
         writer.add_histogram("histograms/episode_length_distribution", np.array(cumulative_episode_length), global_step)
         writer.add_histogram("histograms/action_counter_distribution", np.array(action_counter), global_step)
-        writer.add_histogram("histograms/action_nodes_distribution", np.array(action_nodes), global_step)
+       # writer.add_histogram("histograms/action_nodes_distribution", np.array(action_nodes), global_step)
         writer.add_histogram(
             "histograms/remaining_pivot_size_distribution", np.array(remaining_pivot_size), global_step
         )
