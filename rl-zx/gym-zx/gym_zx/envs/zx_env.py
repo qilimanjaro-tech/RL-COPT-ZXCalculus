@@ -1342,18 +1342,18 @@ class ZXEnv(gym.Env):
             #remove edges connected to this node
             edge_list = self.policy_obs_dict.get("edge_list")
             edge_features = self.policy_obs_dict.get("edge_features")
-            if neighbors:
-                for neigh, vert in zip(neighbors, rem_vert):
-                    to_remove = []
-                    for n in neigh:
-                        if (n,vert) in edge_list:#case of fictious edge 
-                            idx1 = edge_list.index((n, vert))
-                            idx2 = edge_list.index((vert, n))
-                            to_remove.extend([idx1, idx2])
+            
+            for neigh, vert in zip(neighbors, rem_vert):
+                to_remove = []
+                for n in neigh:
+                    if (n,vert) in edge_list:#case of fictious edge 
+                        idx1 = edge_list.index((n, vert))
+                        idx2 = edge_list.index((vert, n))
+                        to_remove.extend([idx1, idx2])
                         
-                    for idx in sorted(to_remove, reverse=True):
-                        edge_list.pop(idx)
-                        edge_features.pop(idx)
+                for idx in sorted(to_remove, reverse=True):
+                    edge_list.pop(idx)
+                    edge_features.pop(idx)
 
        
 
