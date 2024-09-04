@@ -116,7 +116,6 @@ class ZXEnv(gym.Env):
                 edge_tablef, rem_vertf, rem_edgef,_ = self.spider_fusion(neighbours)
                 edge_table = {}
                 rem_vert = rem_vert+rem_vertf
-                #neighboursf = [list(filter(lambda x: x not in rem_vertf, self.graph.neighbors(rem))) for rem in rem_vertf]
                 rem_node = (rem_vert, [])
                 rem_edge = rem_edge+rem_edgef
                 self.apply_rule(edge_tablef, rem_vertf, rem_edgef)
@@ -130,13 +129,13 @@ class ZXEnv(gym.Env):
             pv_type = self.pivot_info_dict[(act_node1, act_node2)][-1]
             if pv_type == 0:
                 edge_table, rem_vert, rem_edge,_ = self.pivot(act_node1,act_node2)
-                neighbours = [list(filter(lambda x: x not in rem_vert, self.graph.neighbors(rem))) for rem in rem_vert]
+                neighbours = [list(self.graph.neighbors(rem)) for rem in rem_vert]
                 rem_node = (rem_vert, neighbours)
                 self.apply_rule(edge_table, rem_vert, rem_edge)
             else:
                 #act_node2 is the node connected to a boundary and the node that needs to be put phase 0 for the policy&value obs
                 edge_table, rem_vert, rem_edge,_ = self.pivot_gadget(act_node1, act_node2)
-                neighbours = [list(filter(lambda x: x not in rem_vert, self.graph.neighbors(rem))) for rem in rem_vert]
+                neighbours = [list(self.graph.neighbors(rem)) for rem in rem_vert]
                 rem_node = (rem_vert, neighbours)
                 self.gadget = True
                 self.apply_rule(edge_table, rem_vert, rem_edge)
@@ -1357,12 +1356,20 @@ class ZXEnv(gym.Env):
                     edge_list.pop(idx)
                     edge_features.pop(idx)
 
+            #rearrange conections of all nodes of the graph
+            for index,edge in enumerate(edge_list):
+                v1, v2 = edge[0], edge[1]
+                index_v1, index_v2 = node_list.index(v1), node_list.index(v2)
+                edge_list[index] = (index_v1,index_v2)
+
        
 
        
         #add new connections. The edge is added if not found and deleted otherwhise.
+        #(v1_graph,v2_graph) are the edges returning from the graph
         if edge_dict:
-            for (v1,v2),edge_type in edge_dict.items(): 
+            for (v1_graph,v2_graph),edge_type in edge_dict.items(): 
+                v1,v2 = node_list.index(v1_graph), node_list.index(v2_graph)
                 to_remove=[]
                 if (v1,v2) not in edge_list and (v2,v1) not in edge_list:
                     edge_list.extend([(v1,v2), (v2,v1)])
@@ -1391,8 +1398,12 @@ class ZXEnv(gym.Env):
         keys_wo_stop= list(action_dict.keys())
 
        
+
+        #remove the actions that involve action nodes: i.e. if action is PIV on (27,34), no other action should be applied to either nodes 27 or 34 
+        keys_wo_stop_filtered = [item for item in keys_wo_stop if not (isinstance(item, tuple) and any(elem in act_nodes for elem in item))]
+
         # Iterate through the selected keys and change connections as now when having erased/added nodes, the identifiers have a different position in the node_list
-        for key in keys_wo_stop:
+        for key in keys_wo_stop_filtered:
             value = action_dict[key]
             identifier = value.get("identifier") 
             idx = node_list.index(identifier)
@@ -1419,7 +1430,12 @@ class ZXEnv(gym.Env):
                 
         node_list.remove(identifier)#remove from node_list
 
-       #add new actions, check the neighborhood of the action node and check for new actions
+        #add new actions, check the neighborhood of the action node and check for new actions
+        # Iterate through each sublist in list1
+        for neigh in neighbors:
+            neigh[:] = [item for item in neigh if item not in act_nodes]
+
+
         candidate_nodes = [item for sublist in neighbors for item in sublist]#neighbors of the action node
         assert len(self.policy_obs_dict["node_list"]) == len(self.policy_obs_dict["node_features"])
         assert len(self.policy_obs_dict["edge_list"]) == len(self.policy_obs_dict["edge_features"])
