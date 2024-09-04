@@ -35,6 +35,7 @@ class ZXEnv(gym.Env):
         self.qubits, self.depth = qubits, depth
         self.shape = 3000
         self.gate_type = "twoqubits"
+        self.env_id = env_id
 
         self.max_episode_len = 1000
         self.cumulative_reward_episodes = 0
