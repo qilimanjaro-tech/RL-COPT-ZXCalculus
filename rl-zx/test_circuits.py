@@ -25,7 +25,7 @@ if __name__ == "__main__":
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     rl_agent = AgentGNN(None,device=device).to(device)
     rl_agent.load_state_dict(
-            torch.load("/home/jnogue/qilimanjaro/Copt-cquere/rl-zx/state_dict_5x70_cquere_twoqubits.pt", map_location=torch.device("cpu"))
+            torch.load("/home/jan.nogue/RL-ZX/Copt-cquere/rl-zx/state_dict_5x70_cquere_twoqubits.pt", map_location=torch.device("cpu"))
         )  
     rl_agent.eval()
     twoqubit_gates = 60
@@ -46,6 +46,7 @@ if __name__ == "__main__":
             next_obs_graph = (Batch.from_data_list(policy_graph), Batch.from_data_list(value_graph))
             final_circuit = flow_opt(SrH_env.final_circuit)
             data = final_circuit.to_dict()
+            circuit_permuted = SrH_env.circuit_up_to_perm
             if data["twoqubits"] < twoqubit_gates:
                 twoqubit_gates = data["twoqubits"]
                 qasm_string = final_circuit.to_qasm()
