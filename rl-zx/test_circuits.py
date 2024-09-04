@@ -105,7 +105,7 @@ if __name__ == "__main__":
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     rl_agent = AgentGNN(None,device=device).to(device)
     rl_agent.load_state_dict(
-            torch.load("/home/jnogue/qilimanjaro/Copt-cquere/rl-zx/state_dict_5x70_cquere_twoqubits.pt", map_location=torch.device("cpu"))
+            torch.load("/home/jan.nogue/RL-ZX/Copt-cquere/rl-zx/state_dict_5x70_cquere_twoqubits.pt", map_location=torch.device("cpu"))
         )  
     rl_agent.eval()
     twoqubit_gates, singlequbit_gates = 60,60
