@@ -51,7 +51,7 @@ def parse_args():
         help="weather to capture videos of the agent performances (check out `videos` folder)")
 
     # Algorithm specific arguments
-    parser.add_argument("--num-envs", type=int, default=4,
+    parser.add_argument("--num-envs", type=int, default=1,
         help="the number of parallel game environments") #default 8
     parser.add_argument("--num-steps", type=int, default=2048,
         help="the number of steps to run in each environment per policy rollout")
@@ -194,8 +194,10 @@ if __name__ == "__main__":
                 values[step] = value.flatten()
             actions[step] = action
             logprobs[step] = logprob
-
+            
             next_obs, reward, done, deprecated, info = envs.step(action_ids.cpu().numpy())
+            
+        
             rewards[step] = torch.tensor(reward).to(device).view(-1)
 
             next_done = torch.Tensor(done).to(device)
@@ -393,7 +395,7 @@ if __name__ == "__main__":
         writer.add_histogram("histograms/reward_distribution", np.array(cumulative_reward), global_step)
         writer.add_histogram("histograms/episode_length_distribution", np.array(cumulative_episode_length), global_step)
         writer.add_histogram("histograms/action_counter_distribution", np.array(action_counter), global_step)
-        writer.add_histogram("histograms/action_nodes_distribution", np.array(action_nodes), global_step)
+       # writer.add_histogram("histograms/action_nodes_distribution", np.array(action_nodes), global_step)
         writer.add_histogram(
             "histograms/remaining_pivot_size_distribution", np.array(remaining_pivot_size), global_step
         )
