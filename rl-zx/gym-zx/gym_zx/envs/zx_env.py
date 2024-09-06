@@ -302,7 +302,7 @@ class ZXEnv(gym.Env):
         """c = zx.generate.cquere_circuit(qubits=self.qubits,depth=self.depth,p_rx = 0.02, p_rz = 0.22, p_ry=0.28, p_rzz=0.42, 
             p_trz = 0.06, p_try = 0, p_trx = 0).to_basic_gates()   """
         #c = zx.Circuit.from_qasm_file("/home/jnogue/qilimanjaro/Copt-cquere/rl-zx/qasm_circuit.qasm")
-        g = zx.generate.cliffordT(qubits=self.qubits, depth = self.depth, p_t=0, p_s=0.5)
+        g = zx.generate.cliffordT(qubits=self.qubits, depth = self.depth)
         c = zx.Circuit.from_graph(g)
         #string = c.to_qasm()
         """with open("qasm_circuit.qasm", "w") as file:
