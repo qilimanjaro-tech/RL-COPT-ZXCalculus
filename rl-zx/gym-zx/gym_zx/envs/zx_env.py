@@ -1569,7 +1569,7 @@ class ZXEnv(gym.Env):
         x = torch.tensor(node_features).view(-1, self.number_node_features_policy)
         x = x.type(torch.float32)
         
-        edge_index = torch.tensor(edge_list).t().contiguous()
+        edge_index = torch.tensor(self.edge_list_relabeled).t().contiguous()
         edge_features = torch.tensor(edge_features).view(-1, self.number_edge_features_policy)
        
         identifier = torch.tensor(node_list)
@@ -1600,7 +1600,7 @@ class ZXEnv(gym.Env):
         assert len(edge_features_value[0]) == self.number_edge_features_value
 
         #Create tensor objects
-        edge_index_value = torch.tensor(edge_list).t().contiguous()
+        edge_index_value = torch.tensor(self.edge_list_relabeled).t().contiguous()
         x_value = torch.tensor(node_features_value).view(-1, self.number_node_features_value)
         x_value = x_value.type(torch.float32)
         edge_features = torch.tensor(edge_features_value).view(-1, self.number_edge_features_value)
