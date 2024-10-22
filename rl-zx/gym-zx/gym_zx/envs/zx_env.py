@@ -30,7 +30,7 @@ def handler(signum, frame):
 
 class ZXEnv(gym.Env):
     def __init__(self, qubits, depth, env_id):
-        self.device = "cpu"
+        self.device = "cuda"
         self.clifford = False
         self.qubits, self.depth = qubits, depth
         self.shape = 3000
@@ -65,7 +65,7 @@ class ZXEnv(gym.Env):
             act_type = "ID"
             self.episode_stats["id"] +=1
             act_node1 = int(action) - int(self.shape**2)
-            print(act_node1)
+            
         elif int(action) < 0:
             act_type = "GF"
             self.episode_stats["gf"] += 1 
@@ -89,7 +89,7 @@ class ZXEnv(gym.Env):
                 else:
                     act_type = "PVG"
                     self.episode_stats["pivg"] += 1
-            print(act_node1,act_node2)
+         
                 
         # Update Stats
         self.render_flag = 1
@@ -167,18 +167,18 @@ class ZXEnv(gym.Env):
 
 
         
-        
-        #what do we do in the STOP case?
-        if action_id not in [0,5]:
-            self.policy_obs_info = self.update_policy(act_nodes = node, edge_dict = edge_table, rem_node=rem_node)
-            self.value_obs_info = self.update_value()
-            #pass
-        
-        #self.graph = self.graph.copy() #Relabel nodes due to PYZX not keeping track of node id properly.
+        self.graph = self.graph.copy() #Relabel nodes due to PYZX not keeping track of node id properly.
         graph = self.graph.copy()
         graph.normalize()
+        """#what do we do in the STOP case?
+        if action_id not in [0,5]:
+            self.policy_obs_info = self.policy_obs()
+            self.value_obs_info = self.value_obs()"""
+            #pass
         
-        """try:
+        
+        
+        try:
             circuit = zx.extract_circuit(graph, up_to_perm=True)
             circuit = circuit.to_basic_gates()
             circ = zx.basic_optimization(circuit).to_basic_gates()
@@ -186,12 +186,12 @@ class ZXEnv(gym.Env):
             new_gates = circuit_data[self.gate_type]
         except:
             new_gates = np.inf
-            act_type = "STOP"""
-        circuit = zx.extract_circuit(graph, up_to_perm=True)
+            act_type = "STOP"
+        """circuit = zx.extract_circuit(graph, up_to_perm=True)
         circuit = circuit.to_basic_gates()
         circ = zx.basic_optimization(circuit).to_basic_gates()
         circuit_data = self.get_data(circ)
-        new_gates = circuit_data[self.gate_type]
+        new_gates = circuit_data[self.gate_type]"""
         
         self.action_pattern.append([act_type, new_gates-self.current_gates])
         reward = 0
@@ -240,8 +240,6 @@ class ZXEnv(gym.Env):
             
             done = True
             self.episode+=1
-            if self.episode == 5:#52
-                print("jordi que llest que ets")
             print("Win vs Pyzx: ", win_vs_pyzx, " Episode Gates: ", self.min_gates, "Cflow_gates: ", self.pyzx_gates, "Episode Len", self.episode_len, 
                   "Opt Episode Len", self.opt_episode_len, "episode", self.episode)
             return (
@@ -296,8 +294,8 @@ class ZXEnv(gym.Env):
             {
                 "action": action_id,
                 "nodes": node,
-                "graph_obs": [self.policy_obs_info, 
-                              self.value_obs_info],
+                "graph_obs": [self.policy_obs(), 
+                              self.value_obs()],
             },
         )
 

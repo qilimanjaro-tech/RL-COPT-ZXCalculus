@@ -295,7 +295,9 @@ if __name__ == "__main__":
 
                 _, newlogprob, entropy, newvalue, logits, _ = agent.get_action_and_value(
                     (policies_batch, values_batch),
-                    b_actions.long()[mb_inds].permute(*torch.arange(b_actions.long()[mb_inds].ndim - 1, -1, -1)), device=device
+                    None,
+                    b_actions.long()[mb_inds].permute(*torch.arange(b_actions.long()[mb_inds].ndim - 1, -1, -1))
+                    , device=device
                 )  # training begins, here we pass minibatch action so the agent doesnt sample a new action
                 logratio = newlogprob - b_logprobs[mb_inds]  # logratio = log(newprob/oldprob)
                 ratio = logratio.exp()

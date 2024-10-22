@@ -171,7 +171,7 @@ class AgentGNN(nn.Module):
 
         return action.permute(*torch.arange(action.ndim - 1, -1, -1)), action_id.permute(*torch.arange(action_id.ndim - 1, -1, -1))
 
-    def get_action_and_value(self, x, action=None, device="cpu", testing=False):
+    def get_action_and_value(self, x, action=None, device="cuda", testing=False):
         
         policy_obs, value_obs = x
         logits = self.actor(policy_obs)
