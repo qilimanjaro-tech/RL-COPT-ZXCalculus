@@ -269,7 +269,7 @@ if __name__ == "__main__":
                         next_return = returns[t + 1]
                     returns[t] = rewards[t] + args.gamma * nextnonterminal * next_return
                 advantages = returns - values
-
+            
         #flatten the batch
         b_logprobs = logprobs.reshape(-1)
         b_actions = actions.reshape((-1,) + envs.single_action_space.shape)
