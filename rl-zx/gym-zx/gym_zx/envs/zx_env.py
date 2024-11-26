@@ -2,7 +2,7 @@ import copy
 import random
 import signal
 import time
-
+import json
 from fractions import Fraction
 from typing import Callable, Dict, List, Optional, Set, Tuple, Union
 
@@ -29,15 +29,19 @@ def handler(signum, frame):
     raise Exception("end of time")
 
 class ZXEnv(gym.Env):
-    def __init__(self, qubits, depth, env_id):
+    def __init__(self, qubits, depth, env_id = None, circuit=None, toffoli=False, basic_opt=True, tele_red = True):
         self.device = "cuda"
         self.clifford = False
         self.qubits, self.depth = qubits, depth
+        self.circuit_to_test = circuit
         self.shape = 3000
-        self.gate_type = "twoqubits"
+        self.gate_type= "twoqubits"
+        self.toffoli = toffoli
         self.env_id = env_id
+        self.basic_opt = basic_opt
+        self.teleport_reduce=tele_red
 
-        self.max_episode_len = 1000
+        self.max_episode_len = 250
         self.cumulative_reward_episodes = 0
         self.win_episodes = 0
         self.max_compression = 20
@@ -279,7 +283,7 @@ class ZXEnv(gym.Env):
                                      self.best_action_stats["gf"]],
                     "depth": self.final_circuit.depth(),
                     "initial_depth": self.initial_depth,
-                    "env_id": self.env_id
+                    "nodes": node,
                 },
             )
 
@@ -315,39 +319,60 @@ class ZXEnv(gym.Env):
         self.count = 0
         
 
-        '''stats 10 qubits
-        c = zx.generate.cquere_circuit(qubits=self.qubits,depth=self.depth, p_rz = 0.32, p_ry=0.36, p_rzz=0.29, 
-                                       p_rx = 0.03, p_trz = 0.21, p_try = 0.065, p_trx = 0.5).to_basic_gates()
-        '''
-        #stats 12 qubits
+      
+        if self.circuit_to_test:
+            c = self.circuit_to_test
+            graph = c.to_graph()
+        elif self.toffoli:
+            with open("/home/jnogue/qilimanjaro/Copt-cquere/rl-zx/cquere/cdfs.json", 'r') as file:
+                cdfs = json.load(file)
+                cdfs = {key: np.array(value) for key, value in cdfs.items()}
+            
+            gates_probs = self.sample_gate(cdfs)
+            p_x = gates_probs["x"]
+            p_cx = gates_probs["cx"]
+            p_h = gates_probs["h"]
+            p_ccx = gates_probs["ccx"]
+            
+            c = zx.generate.generate_toffoli_adder_circuit(self.qubits, self.depth, p_x = p_x, 
+                                                           p_h = p_h, p_cx = p_cx, p_ccx = p_ccx).to_basic_gates()
+            graph = c.to_graph()
 
-        """c = zx.generate.cquere_circuit(qubits=self.qubits,depth=self.depth,p_rx = 0.02, p_rz = 0.22, p_ry=0.28, p_rzz=0.42, 
-            p_trz = 0.06, p_try = 0, p_trx = 0).to_basic_gates()   """
-        c = zx.Circuit.from_qasm_file("/home/jnogue/qilimanjaro/Copt-cquere/rl-zx/qasm_circuit.qasm")
-        """g = zx.generate.cliffordT(
-               self.qubits, self.depth, p_t=0.17, p_s=0.24, p_hsh=0.25, 
-            )
-        c = zx.Circuit.from_graph(g)"""
-        string = c.to_qasm()
+        else:
+            g = zx.generate.cliffordT(
+                self.qubits, self.depth, p_t=0.17, p_s=0.24, p_hsh=0.25, 
+                )
+            c = zx.Circuit.from_graph(g)
+            graph = g.copy()
+        """string = c.to_qasm()
         with open("qasm_circuit.qasm", "w") as file:
-            file.write(string)
+            file.write(string)"""
 
     
         self.no_opt_stats = self.get_data(c)
         self.initial_depth = c.depth()
-        
-        self.initial_stats = self.get_data(c)
-        graph = c.to_graph()
-        
-        basic_circ = zx.optimize.basic_optimization(zx.Circuit.from_graph(graph.copy()).split_phase_gates())
-        circuit_data = self.get_data(basic_circ.to_basic_gates())
-        self.graph = basic_circ.to_graph()
+        self.initial_stats = self.no_opt_stats.copy()
+        if self.basic_opt:
+            basic_circ = zx.optimize.basic_optimization(zx.Circuit.from_graph(graph.copy()).split_phase_gates())
+            circuit_data = self.get_data(basic_circ.to_basic_gates())
+            self.graph = basic_circ.to_graph()
+            c = basic_circ.copy()
+        else:
+            circuit_data = self.no_opt_stats
+            self.graph = graph.copy()
+            basic_circ = c.copy()
+       
+
+        if self.teleport_reduce: 
+            zx.teleport_reduce(self.graph)
+            #here we haven't updated the t count on circuit data
+
         self.to_graph_like()
         self.graph = self.graph.copy()  # This relabels the nodes such that there are no empty spaces
-        self.pyzx_data = self.obtain_gates_pyzx(graph.copy())
+        self.pyzx_data = self.flow_opt(c)
         self.pyzx_gates = self.pyzx_data[self.gate_type]
         
-        #self.pivot_info_dict = self.create_unique_pivot_keys(self.match_pivot_parallel(), self.match_pivot_boundary(), self.match_pivot_gadget())
+        
         self.pivot_info_dict = self.match_pivot_parallel() | self.match_pivot_boundary() | self.match_pivot_gadget()
         self.gadget_info_dict, self.gadgets = self.match_phase_gadgets()
         self.gadget_fusion_ids = list(self.gadget_info_dict)
@@ -1125,7 +1150,8 @@ class ZXEnv(gym.Env):
                     # n = gad.pop()
                     gadget_info_dict[tuple(gad)] = len(par)
             if gadget_info_dict:
-                print("true")
+                #print("true")
+                return gadget_info_dict, gadgets
 
             return gadget_info_dict, gadgets
 
@@ -1297,6 +1323,25 @@ class ZXEnv(gym.Env):
         circuit = zx.basic_optimization(circuit).to_basic_gates()
         self.pyzx_swap_cost = 0
         return self.get_data(circuit)
+    
+
+    def basic_optimise(self,c):
+        c1 = zx.basic_optimization(c.copy(), do_swaps=False).to_basic_gates()
+        c2 = zx.basic_optimization(c.copy(), do_swaps=True).to_basic_gates()
+        if c2.twoqubitcount() < c1.twoqubitcount():
+            return c2  # As this optimisation algorithm is targetted at reducting H-gates, we use the circuit with the smaller 2-qubit gate count here, either using SWAP rules or not.
+        return c1
+
+
+    def flow_opt(self,c):
+        g = c.to_graph()
+        zx.teleport_reduce(g)
+        zx.to_graph_like(g)
+        zx.flow_2Q_simp(g)
+        c2 = zx.extract_simple(g).to_basic_gates()
+        c3 = self.basic_optimise(c2)
+        self.pyzx_swap_cost = 0
+        return self.get_data(c3)
     
     def create_policy_features_gadget(self, node_list, edge_list):
         """Code to create new nodes and edges features for the policy obs"""
@@ -1693,30 +1738,20 @@ class ZXEnv(gym.Env):
         return list(set_pyzx-set_policy), list(set_policy-set_pyzx)
         
 
-    def create_unique_pivot_keys(self, match_pivot_parallel, match_pivot_boundary, match_pivot_gadget):
-        # Combine all keys from the dictionaries
-        combined_keys = list(match_pivot_parallel.keys()) + list(match_pivot_boundary.keys()) + list(match_pivot_gadget.keys())
+    def sample_gate(self, cdfs):
+        gates = list(cdfs.keys())
+        samples = []
 
-        # Use a set to store unique pairs in a sorted order
-        unique_pairs = set()
-        for pair in combined_keys:
-            unique_pairs.add(tuple(sorted(pair)))
+        for gate in gates:
+            r = random.random()
+            idx = np.searchsorted(cdfs[gate], r)
+            samples.append(cdfs[gate][idx])
 
-        # Create a new dictionary with unique keys
-        final_dict = {}
-        for pair in unique_pairs:
-            if pair not in final_dict:
-             
-                v0,v1 = pair
-                # Check for both (v0, v1) and (v1, v0) in all three dictionaries
-                if (v0, v1) in match_pivot_gadget or (v1, v0) in match_pivot_gadget:
-                    key = (v0, v1) if (v0, v1) in match_pivot_gadget else (v1, v0)
-                    final_dict[pair] = match_pivot_gadget[key]
-                if (v0, v1) in match_pivot_parallel or (v1, v0) in match_pivot_parallel:
-                    key = (v0, v1) if (v0, v1) in match_pivot_parallel else (v1, v0)
-                    final_dict[pair] = match_pivot_parallel[key]
-                if (v0, v1) in match_pivot_boundary or (v1, v0) in match_pivot_boundary:
-                    key = (v0, v1) if (v0, v1) in match_pivot_boundary else (v1, v0)
-                    final_dict[pair] = match_pivot_boundary[key]
-              
-        return final_dict
+        # Normalize 
+        total = sum(samples)
+        normalized_samples = [sample / total for sample in samples]
+        normalized_samples_dict = {key:samples for key,samples in zip(gates,normalized_samples)}
+        return normalized_samples_dict
+
+
+    

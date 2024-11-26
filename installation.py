@@ -1,7 +1,7 @@
 import os
 import subprocess
 
-os.system("pip install -r requirements.txt")
+os.system("pip install -r requirements2.txt")
 
 subprocess.run(["pip", "install", "-e", "git+https://github.com/jng164/pyzx.git#egg=pyzx"], check=True)
 

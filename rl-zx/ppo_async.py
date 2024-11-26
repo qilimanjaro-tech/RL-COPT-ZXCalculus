@@ -51,9 +51,9 @@ def parse_args():
         help="weather to capture videos of the agent performances (check out `videos` folder)")
 
     # Algorithm specific arguments
-    parser.add_argument("--num-envs", type=int, default=1,
+    parser.add_argument("--num-envs", type=int, default=8,
         help="the number of parallel game environments") #default 8
-    parser.add_argument("--num-steps", type=int, default=2048,
+    parser.add_argument("--num-steps", type=int, default=2048,#default 2048
         help="the number of steps to run in each environment per policy rollout")
     parser.add_argument("--anneal-lr", type=lambda x: bool(strtobool(x)), default=True, nargs="?", const=True,
         help="Toggle learning rate annealing for policy and value networks")
@@ -87,10 +87,10 @@ def parse_args():
     # fmt: on
     return args
 
-def make_env(gym_id, seed, idx, capture_video, run_name, qubits, depth):
+def make_env(gym_id, seed, idx, capture_video, run_name, qubits, depth, toffoli,circuit, basic_opt,tele_reduce):
     
     def thunk():
-        env = gym.make(gym_id, qubits=qubits, depth=depth, env_id= idx)
+        env = gym.make(gym_id, qubits=qubits, depth=depth, env_id= idx,circuit=circuit, toffoli=toffoli, basic_opt=basic_opt, tele_red=tele_reduce)
         env = gym.wrappers.RecordEpisodeStatistics(env)
         if capture_video and idx == 0:
             env = gym.wrappers.RecordVideo(env, f"videos/{run_name}")
@@ -111,7 +111,13 @@ if __name__ == "__main__":
     
     #Training size
     qubits = 5
-    depth = 70
+    depth = 30
+    toffoli=False
+    dirname = "/home/jan.nogue/radagast/home_content_jnogue/qilimanjaro/Copt-cquere/rl-zx/cquere/circuits/before/ibm_pretraining/"
+    circuit_name = '6_qubits.qasm'
+    circuit= zx.Circuit.from_qasm_file(dirname + circuit_name).to_basic_gates()
+    basic_opt=True
+    tele_reduce=True
     
     random.seed(args.seed)
     np.random.seed(args.seed)
@@ -121,8 +127,11 @@ if __name__ == "__main__":
     device = torch.device("cuda" if torch.cuda.is_available() and args.cuda else "cpu")
     #device = torch.device("cpu")
     
-    envs = gym.vector.AsyncVectorEnv(
-       [make_env(args.gym_id, args.seed + i, i, args.capture_video, run_name, qubits, depth) for i in range(args.num_envs)], shared_memory=False)
+    """envs = gym.vector.AsyncVectorEnv(
+       [make_env(args.gym_id, args.seed + i, i, args.capture_video, run_name, qubits, depth, toffoli, circuit, basic_opt, tele_reduce) for i in range(args.num_envs)], 
+       shared_memory=False)"""
+    envs = gym.vector.SyncVectorEnv(
+       [make_env(args.gym_id, args.seed + i, i, args.capture_video, run_name, qubits, depth, toffoli, circuit, basic_opt, tele_reduce) for i in range(args.num_envs)])
     
     agent = AgentGNN(envs, device).to(device)
 
@@ -169,8 +178,8 @@ if __name__ == "__main__":
     for update in range(1, num_updates + 1):
         # Annealing the rate if instructed to do so.
 
-        """if update % 50 == 1:
-            torch.save(agent.state_dict(), "state_dict_" + str(global_step) + "model5x70_twoqubits_new.pt")"""
+        if update % 50 == 1:
+            torch.save(agent.state_dict(), "state_dict_" + str(global_step) + circuit_name+".pt")
         
         if args.anneal_lr:
             frac = max(1.0 / 100, 1.0 - (update - 1.0) / (num_updates * 5.0 / 6))
@@ -295,7 +304,6 @@ if __name__ == "__main__":
 
                 _, newlogprob, entropy, newvalue, logits, _ = agent.get_action_and_value(
                     (policies_batch, values_batch),
-                    None,
                     b_actions.long()[mb_inds].permute(*torch.arange(b_actions.long()[mb_inds].ndim - 1, -1, -1))
                     , device=device
                 )  # training begins, here we pass minibatch action so the agent doesnt sample a new action
@@ -340,12 +348,11 @@ if __name__ == "__main__":
                 loss.backward()
                 nn.utils.clip_grad_norm_(agent.parameters(), args.max_grad_norm)
                 optimizer.step()
-            torch.cuda.empty_cache() #free memory after completing an epoch
 
             if args.target_kl is not None:
                 if approx_kl > args.target_kl:
                     break
-            torch.cuda.empty_cache()   
+            torch.cuda.ipc_collect()  
         y_pred, y_true = b_values.cpu().numpy(), b_returns.cpu().numpy()
         var_y = np.var(y_true)
         explained_var = np.nan if var_y == 0 else 1 - np.var(y_true - y_pred) / var_y
