@@ -51,7 +51,7 @@ def parse_args():
         help="weather to capture videos of the agent performances (check out `videos` folder)")
 
     # Algorithm specific arguments
-    parser.add_argument("--num-envs", type=int, default=8,
+    parser.add_argument("--num-envs", type=int, default=1,
         help="the number of parallel game environments") #default 8
     parser.add_argument("--num-steps", type=int, default=2048,#default 2048
         help="the number of steps to run in each environment per policy rollout")
@@ -90,7 +90,7 @@ def parse_args():
 def make_env(gym_id, seed, idx, capture_video, run_name, qubits, depth, toffoli,circuit, basic_opt,tele_reduce):
     
     def thunk():
-        env = gym.make(gym_id, qubits=qubits, depth=depth, env_id= idx,circuit=circuit, toffoli=toffoli, basic_opt=basic_opt, tele_red=tele_reduce)
+        env = gym.make(gym_id, qubits=qubits, depth=depth, env_id= idx,circuit=circuit, toffoli=toffoli, basic_opt=basic_opt, tele_red=tele_reduce, QAOA=True)
         env = gym.wrappers.RecordEpisodeStatistics(env)
         if capture_video and idx == 0:
             env = gym.wrappers.RecordVideo(env, f"videos/{run_name}")
@@ -110,13 +110,14 @@ if __name__ == "__main__":
     )
     
     #Training size
-    qubits = 5
+    qubits = 3
     depth = 30
     toffoli=False
     dirname = "/home/jan.nogue/radagast/home_content_jnogue/qilimanjaro/Copt-cquere/rl-zx/cquere/circuits/before/ibm_pretraining/"
     circuit_name = '6_qubits.qasm'
-    circuit= zx.Circuit.from_qasm_file(dirname + circuit_name).to_basic_gates()
-    basic_opt=True
+    #circuit= zx.Circuit.from_qasm_file(dirname + circuit_name).to_basic_gates()
+    circuit=None
+    basic_opt=False
     tele_reduce=True
     
     random.seed(args.seed)
@@ -127,11 +128,12 @@ if __name__ == "__main__":
     device = torch.device("cuda" if torch.cuda.is_available() and args.cuda else "cpu")
     #device = torch.device("cpu")
     
-    """envs = gym.vector.AsyncVectorEnv(
+    envs = gym.vector.AsyncVectorEnv(
        [make_env(args.gym_id, args.seed + i, i, args.capture_video, run_name, qubits, depth, toffoli, circuit, basic_opt, tele_reduce) for i in range(args.num_envs)], 
-       shared_memory=False)"""
+       shared_memory=False)
+    """
     envs = gym.vector.SyncVectorEnv(
-       [make_env(args.gym_id, args.seed + i, i, args.capture_video, run_name, qubits, depth, toffoli, circuit, basic_opt, tele_reduce) for i in range(args.num_envs)])
+       [make_env(args.gym_id, args.seed + i, i, args.capture_video, run_name, qubits, depth, toffoli, circuit, basic_opt, tele_reduce) for i in range(args.num_envs)])"""
     
     agent = AgentGNN(envs, device).to(device)
 

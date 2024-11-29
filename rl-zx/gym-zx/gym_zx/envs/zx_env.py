@@ -6,6 +6,11 @@ import json
 from fractions import Fraction
 from typing import Callable, Dict, List, Optional, Set, Tuple, Union
 
+
+from variational_algorithms.use_cases.maxcut.cost_function import MaxCut_CostFunction
+from variational_algorithms.use_cases.maxcut.instances import MaxCut_Instance
+from variational_algorithms.ansatz import QAOAAnsatz
+
 import matplotlib.pyplot as plt
 import gymnasium as gym
 import networkx as nx
@@ -19,7 +24,7 @@ from pyzx.extract import bi_adj, connectivity_from_biadj, greedy_reduction, id_s
 # from pyzx.gflow import gflow
 from pyzx.graph.base import ET, VT, BaseGraph
 from pyzx.linalg import Mat2
-from pyzx.simplify import apply_rule, pivot
+from pyzx.simplify import apply_rule, pivot, id_simp
 from pyzx.symbolic import Poly
 from pyzx.utils import EdgeType, VertexType, toggle_edge
 
@@ -29,19 +34,20 @@ def handler(signum, frame):
     raise Exception("end of time")
 
 class ZXEnv(gym.Env):
-    def __init__(self, qubits, depth, env_id = None, circuit=None, toffoli=False, basic_opt=True, tele_red = True):
+    def __init__(self, qubits, depth, env_id = None, circuit=None, toffoli=False, basic_opt=True, tele_red = True, QAOA=False):
         self.device = "cuda"
         self.clifford = False
         self.qubits, self.depth = qubits, depth
         self.circuit_to_test = circuit
-        self.shape = 3000
+        self.shape = 2000
         self.gate_type= "twoqubits"
         self.toffoli = toffoli
         self.env_id = env_id
         self.basic_opt = basic_opt
         self.teleport_reduce=tele_red
+        self.QAOA = QAOA
 
-        self.max_episode_len = 250
+        self.max_episode_len = 120
         self.cumulative_reward_episodes = 0
         self.win_episodes = 0
         self.max_compression = 20
@@ -318,8 +324,6 @@ class ZXEnv(gym.Env):
         self.best_action_stats = {"pivb": 0 , "pivg":0, "piv":0 , "lc": 0, "id":0, "gf":0}
         self.count = 0
         
-
-      
         if self.circuit_to_test:
             c = self.circuit_to_test
             graph = c.to_graph()
@@ -337,6 +341,23 @@ class ZXEnv(gym.Env):
             c = zx.generate.generate_toffoli_adder_circuit(self.qubits, self.depth, p_x = p_x, 
                                                            p_h = p_h, p_cx = p_cx, p_ccx = p_ccx).to_basic_gates()
             graph = c.to_graph()
+        
+        elif self.QAOA:
+
+            layers = 2
+
+            instance_mc = MaxCut_Instance(self.qubits)
+            instance_mc.random_uniform_weights()  # seed = 2
+            cost_function_mc = MaxCut_CostFunction(instance_mc)
+            ansatz1_mc = QAOAAnsatz(n_qubits=self.qubits, layers=layers, costfunction=cost_function_mc)
+            theta = [random.uniform(0,1)*2*np.pi for _ in range(0,2*layers)]
+            ansatz = ansatz1_mc.construct_circuit(theta)
+            qasm_string = ansatz.to_qasm()
+            c = zx.Circuit.from_qasm(qasm_string).to_basic_gates()
+            """print(c.stats())
+            print(c.depth())"""
+            #gflow_data = self.gflow_opt(c)
+            graph = c.to_graph()
 
         else:
             g = zx.generate.cliffordT(
@@ -353,10 +374,13 @@ class ZXEnv(gym.Env):
         self.initial_depth = c.depth()
         self.initial_stats = self.no_opt_stats.copy()
         if self.basic_opt:
+
             basic_circ = zx.optimize.basic_optimization(zx.Circuit.from_graph(graph.copy()).split_phase_gates())
             circuit_data = self.get_data(basic_circ.to_basic_gates())
             self.graph = basic_circ.to_graph()
             c = basic_circ.copy()
+            print(c.stats())
+            print(c.depth())
         else:
             circuit_data = self.no_opt_stats
             self.graph = graph.copy()
@@ -372,6 +396,8 @@ class ZXEnv(gym.Env):
         self.pyzx_data = self.flow_opt(c)
         self.pyzx_gates = self.pyzx_data[self.gate_type]
         
+        """if self.QAOA:
+           id_simp(self.graph)"""
         
         self.pivot_info_dict = self.match_pivot_parallel() | self.match_pivot_boundary() | self.match_pivot_gadget()
         self.gadget_info_dict, self.gadgets = self.match_phase_gadgets()
@@ -1341,6 +1367,15 @@ class ZXEnv(gym.Env):
         c2 = zx.extract_simple(g).to_basic_gates()
         c3 = self.basic_optimise(c2)
         self.pyzx_swap_cost = 0
+        return self.get_data(c3)
+    
+    def gflow_opt(self, c):
+        g = c.to_graph()
+        zx.teleport_reduce(g)
+        zx.to_graph_like(g)
+        zx.simplify.greedy_simp(g)
+        c2 = zx.extract_circuit(g).to_basic_gates()
+        c3 = self.basic_optimise(c2)
         return self.get_data(c3)
     
     def create_policy_features_gadget(self, node_list, edge_list):
