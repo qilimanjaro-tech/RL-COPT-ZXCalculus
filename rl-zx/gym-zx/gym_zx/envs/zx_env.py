@@ -47,10 +47,10 @@ class ZXEnv(gym.Env):
         self.teleport_reduce=tele_red
         self.QAOA = QAOA
 
-        self.max_episode_len = 120
+        self.max_episode_len = 20
         self.cumulative_reward_episodes = 0
         self.win_episodes = 0
-        self.max_compression = 20
+        self.max_compression = 10
         self.action={}
         self.number_node_features_policy = 17
         self.number_node_features_value = 12
@@ -194,8 +194,9 @@ class ZXEnv(gym.Env):
             circ = zx.basic_optimization(circuit).to_basic_gates()
             circuit_data = self.get_data(circ)
             new_gates = circuit_data[self.gate_type]
+            reward_error = 0
         except:
-            new_gates = np.inf
+            reward_error = -10
             act_type = "STOP"
         """circuit = zx.extract_circuit(graph, up_to_perm=True)
         circuit = circuit.to_basic_gates()
@@ -204,10 +205,12 @@ class ZXEnv(gym.Env):
         new_gates = circuit_data[self.gate_type]"""
         
         self.action_pattern.append([act_type, new_gates-self.current_gates])
-        reward = 0
+        reward = 0 + reward_error
         if new_gates < self.min_gates:
+            # reward += (self.min_gates - new_gates) / self.max_compression
             self.min_gates = new_gates
-            self.final_circuit = circ            
+            self.final_circuit = circ  
+                 
             
         if new_gates <= self.min_gates:
             self.opt_episode_len = self.episode_len
@@ -345,9 +348,11 @@ class ZXEnv(gym.Env):
         elif self.QAOA:
 
             layers = 2
-
-            instance_mc = MaxCut_Instance(self.qubits)
-            instance_mc.random_uniform_weights()  # seed = 2
+            n_qubits = random.randint(3, self.qubits)
+            instance_mc = MaxCut_Instance(n_qubits)
+            #instance_mc.random_uniform_weights()  # seed = 2
+            prob = random.uniform(0.3,1)
+            instance_mc.erdos_renyi_graph(prob = prob)
             cost_function_mc = MaxCut_CostFunction(instance_mc)
             ansatz1_mc = QAOAAnsatz(n_qubits=self.qubits, layers=layers, costfunction=cost_function_mc)
             theta = [random.uniform(0,1)*2*np.pi for _ in range(0,2*layers)]

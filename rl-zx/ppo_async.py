@@ -110,10 +110,10 @@ if __name__ == "__main__":
     )
     
     #Training size
-    qubits = 3
+    qubits = 8
     depth = 30
     toffoli=False
-    dirname = "/home/jan.nogue/radagast/home_content_jnogue/qilimanjaro/Copt-cquere/rl-zx/cquere/circuits/before/ibm_pretraining/"
+    dirname = "/home/jordi.riu/Copt-cquere/rl-zx/cquere/circuits/before/ibm_pretraining"
     circuit_name = '6_qubits.qasm'
     #circuit= zx.Circuit.from_qasm_file(dirname + circuit_name).to_basic_gates()
     circuit=None
@@ -127,13 +127,13 @@ if __name__ == "__main__":
 
     device = torch.device("cuda" if torch.cuda.is_available() and args.cuda else "cpu")
     #device = torch.device("cpu")
-    
+    """
     envs = gym.vector.AsyncVectorEnv(
        [make_env(args.gym_id, args.seed + i, i, args.capture_video, run_name, qubits, depth, toffoli, circuit, basic_opt, tele_reduce) for i in range(args.num_envs)], 
-       shared_memory=False)
+       shared_memory=False, worker_timeout=60000)
     """
     envs = gym.vector.SyncVectorEnv(
-       [make_env(args.gym_id, args.seed + i, i, args.capture_video, run_name, qubits, depth, toffoli, circuit, basic_opt, tele_reduce) for i in range(args.num_envs)])"""
+       [make_env(args.gym_id, args.seed + i, i, args.capture_video, run_name, qubits, depth, toffoli, circuit, basic_opt, tele_reduce) for i in range(args.num_envs)])
     
     agent = AgentGNN(envs, device).to(device)
 
